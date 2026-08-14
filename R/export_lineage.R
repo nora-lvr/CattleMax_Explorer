@@ -124,7 +124,8 @@ D10 <- dec("horizon","cows.parquet",
   ct(list("left-censored seasons", format(sum(CS$flag_left_censored),big.mark=",")),
      list("right-censored (open at pull)", format(sum(CS$flag_right_censored),big.mark=",")),
      list("parity unknown", sum(CS$flag_parity_unknown)),
-     list("analysis_ready", format(sum(CS$analysis_ready),big.mark=","))),
+     list("rate_ready", format(sum(CS$rate_ready),big.mark=",")),
+     list("interval_ready", format(sum(CS$interval_ready),big.mark=","))),
   "no")
 
 ti <- table(TX$treatment_intent)

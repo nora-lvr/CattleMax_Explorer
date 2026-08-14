@@ -49,9 +49,12 @@ Donor/Recipient is an orthogonal **role**, not a phase.
    dam and for ET calves names the **donor** — using it credits donors with their recipients'
    calvings and makes a recipient herd look barren. See PLAN.md §6.
 8. **Never use `updated_at` as a departure date** — it's a bulk record-edit stamp.
-9. **Respect the record horizon.** CattleMax recording starts only a few years back; filter on
-   `analysis_ready` before computing any rate, and show right-censored seasons as incomplete rather
-   than plotting them as a collapse.
+9. **Respect the record horizon.** CattleMax recording starts only a few years back. Filter on
+   **`rate_ready`** for any rate and **`interval_ready`** for any interval/age average, and show
+   right-censored seasons as incomplete rather than plotting them as a collapse. The old
+   `analysis_ready` column is **gone** — it required `calved == TRUE`, so any rate filtered on it
+   returned 100% by construction. A gate is not a denominator: after passing it you still choose
+   **exposed** or **retained** (PLAN.md §6).
 10. **Charts greyscale; brand colour only for the few genuinely interesting things.**
 11. **NEVER silently discard anything.** If a record falls out of a table or a report, it is
     recorded in the **exclusions ledger** (`R/exclusions.R` → `data/silver-data/exclusions.parquet`)

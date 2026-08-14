@@ -41,5 +41,21 @@ Parameterising that is the first thing to do when this moves to Python.
 ## Data-quality policy
 
 Flag, don't chase. Every derived date carries a `_rule`/`_source` column saying how it was obtained,
-and every questionable row carries a `flag_*` column. `analysis_ready` on `cows.parquet` is the
-column to filter on before computing any rate or average.
+and every questionable row carries a `flag_*` column. Nothing is dropped without an entry in
+`data/silver-data/exclusions.parquet`.
+
+## Which readiness gate to filter on
+
+There were once a single `analysis_ready` column. **It was wrong and has been removed**: it required
+`calved == TRUE`, so filtering a rate on it deleted every failure before the rate was computed and
+returned 100% by construction, while the honest rate was 77.5%. A filter that removes failures
+cannot be used to measure failure.
+
+| gate | means | use for |
+|---|---|---|
+| **`interval_ready`** | she calved, season fully inside the record, interval biologically plausible | calving interval, age at first calving, gestation |
+| **`rate_ready`** | she was exposed and the season is fully inside the record — **says nothing about whether she calved** | % calved, calves per exposed, conception rate |
+
+**A readiness gate is not a denominator.** It decides whether a season is trustworthy enough to use
+at all. Having passed the gate you still choose the denominator — **exposed** (every female served,
+carrying attrition as a cost) or **retained** (still present at her due date). The two axes compose.

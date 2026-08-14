@@ -247,8 +247,30 @@ CS$flag_implausible_multiple <- !is.na(CS$n_calves_born) & CS$n_calves_born > 3
 CS$age_at_calving_yrs <- (CS$age_at_start_days + CS$season_days)/365.25
 CS$flag_impossible_age <- CS$calved & !is.na(CS$age_at_calving_yrs) & CS$age_at_calving_yrs < 1.5
 ## a season is ANALYSIS-READY only if it is closed by a calving and fully inside the record
-CS$analysis_ready <- CS$calved & !CS$flag_left_censored & !CS$flag_right_censored &
-                     !CS$flag_implausible_multiple & !CS$flag_impossible_age
+## ---- TWO READINESS GATES, each meaning exactly one thing ----------------
+## These replace the single `analysis_ready`, which required calved == TRUE and
+## was therefore useless for any rate: filtering on it deleted every failure
+## before the rate was computed, so calved/analysis_ready was 100% by
+## construction while the honest rate was 77.5%.
+##
+## A readiness gate is NOT a denominator. It decides whether a season is
+## trustworthy enough to use at all. Having passed the gate you still choose
+## the denominator: EXPOSED (every female served) or RETAINED (still present at
+## her due date). The two axes compose; see PLAN.md 6.
+##
+## interval_ready - she calved, is fully inside the record, and the interval is
+##   biologically plausible. USE FOR: calving interval, age at first calving,
+##   gestation. Includes calved by necessity: no calving, no interval.
+CS$interval_ready <- CS$calved & !CS$flag_left_censored & !CS$flag_right_censored &
+                     !CS$flag_implausible_multiple & !CS$flag_impossible_age &
+                     !CS$flag_short_interval & !CS$flag_long_interval
+## rate_ready - she was exposed and her season is fully inside the record.
+##   Says NOTHING about whether she calved, so failures stay in the
+##   denominator. USE FOR: % calved, calves per exposed, conception rate.
+CS$rate_ready <- !is.na(CS$first_service) & !CS$flag_left_censored &
+                 !CS$flag_right_censored & !CS$flag_implausible_multiple
+## kept only so older code fails loudly rather than silently returning 100%
+CS$analysis_ready <- NULL
 
 ## ---- EXPOSED vs RETAINED ------------------------------------------------
 ## She was exposed, but did she stay long enough to be able to calve?
@@ -312,21 +334,27 @@ cat(" cow-seasons:", nrow(CS), " cows:", length(unique(CS$animal_id)), " cols:",
 cat("=== outcome ===\n");       print(table(CS$outcome))
 cat("\n=== parity (0 = season before her first calf) ===\n"); print(table(pmin(CS$parity,8)))
 cat("\n=== exposed within the season ===\n"); print(table(CS$exposed))
-cat("\n=== calving interval, ALL vs ANALYSIS-READY (days) ===\n")
-cat("all intervals      (n=", sum(!is.na(CS$calving_interval_days)), "):\n", sep="")
+cat("\n=== calving interval, ALL vs INTERVAL-READY (days) ===\n")
+cat("all intervals       (n=", sum(!is.na(CS$calving_interval_days)), "):\n", sep="")
 print(round(summary(CS$calving_interval_days[!is.na(CS$calving_interval_days)])))
-ar <- CS$calving_interval_days[CS$analysis_ready & !is.na(CS$calving_interval_days)]
-cat("analysis-ready only (n=", length(ar), "):\n", sep="")
+ar <- CS$calving_interval_days[CS$interval_ready & !is.na(CS$calving_interval_days)]
+cat("interval_ready only (n=", length(ar), "):\n", sep="")
 print(round(summary(ar)))
+
+cat("\n=== the two readiness gates ===\n")
+cat("interval_ready :", sum(CS$interval_ready), " (calved, in-record, plausible interval)\n")
+cat("rate_ready     :", sum(CS$rate_ready), " (exposed, in-record; says nothing about calving)\n")
+cat("  of rate_ready, calved:", sum(CS$rate_ready & CS$calved),
+    sprintf(" = %.1f%%  <-- a real rate that can move\n", 100*mean(CS$calved[CS$rate_ready])))
+cat("  (the old analysis_ready would have reported 100% here, by construction)\n")
 
 cat("\n=== censoring ===\n")
 print(c(left_censored=sum(CS$flag_left_censored), spans_horizon=sum(CS$flag_spans_horizon),
-        right_censored=sum(CS$flag_right_censored), parity_unknown=sum(CS$flag_parity_unknown),
-        analysis_ready=sum(CS$analysis_ready)))
+        right_censored=sum(CS$flag_right_censored), parity_unknown=sum(CS$flag_parity_unknown)))
 cat("\n=== seasons per calendar year of season_end, with analysis-ready share ===\n")
 yy <- format(CS$season_end,"%Y")
 print(data.frame(year=names(table(yy)), seasons=as.integer(table(yy)),
-                 ready=as.integer(table(factor(yy[CS$analysis_ready], levels=names(table(yy))))),
+                 ready=as.integer(table(factor(yy[CS$interval_ready], levels=names(table(yy))))),
                  row.names=NULL))
 cat("\n=== age at first calving (years) ===\n")
 f1 <- CS[CS$season_index==1 & CS$calved, ]

@@ -261,10 +261,28 @@ event (twins/multiples) with `n_calves_born`.
 CattleMax recording began only a few years ago; earlier births were back-filled as pedigree, so the
 start of the record is ragged and must never be silently averaged in. The horizon is **derived from
 the data** (earliest operational record — 2018-11-07 for River Creek; note `measurements` contains a
-junk 1900-01-01). Every cow-season carries `flag_left_censored`, `flag_right_censored`,
-`flag_parity_unknown`, and a single **`analysis_ready`** column that is the one to filter on before
-computing any rate or average. It matters: the median calving interval is 357 d overall, but the
-unfiltered set contains intervals of 1 day and 1,431 days.
+junk 1900-01-01). Every cow-season carries `flag_left_censored`, `flag_right_censored` and
+`flag_parity_unknown`.
+
+### Two readiness gates — and a gate is not a denominator
+A single `analysis_ready` column used to serve both jobs. **It was wrong and has been removed.** It
+required `calved == TRUE`, so filtering a rate on it deleted every failure before the rate was
+computed: `calved / analysis_ready` was **100% by construction** on every calf crop, while the
+honest rate was **77.5%**. A filter that removes failures cannot be used to measure failure. It also
+still admitted intervals of 8 to 1,043 days despite `flag_short_interval` / `flag_long_interval`
+being computed and never used.
+
+| gate | means | use for | n (River Creek) |
+|---|---|---|---|
+| **`interval_ready`** | she calved, season fully inside the record, interval plausible | calving interval, age at first calving, gestation | 2,591 |
+| **`rate_ready`** | she was exposed and the season is fully inside the record — **says nothing about whether she calved** | % calved, calves per exposed, conception rate | 3,380 (77.4% calved) |
+
+**These are orthogonal to the denominator choice.** A gate decides whether a season is trustworthy
+enough to use; the denominator decides what you divide by. Having passed `rate_ready` you still
+choose **exposed** (every female served, carrying attrition as a cost) or **retained** (still
+present at her due date). The exposure report prints, per cohort, how many seasons the censoring
+gate would exclude and what the rate is with and without them, so the effect is named rather than
+hidden.
 
 **Right-censoring is equally load-bearing:** a breeding season whose calves are not all due until
 after the pull date must be shown as incomplete, never plotted as a collapse. River Creek's 2025

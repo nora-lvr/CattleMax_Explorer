@@ -38,6 +38,9 @@ cat("\n")
 agg <- do.call(rbind, lapply(sort(unique(E$cohort)), function(k){
   s <- E[E$cohort==k, ]
   lost <- sum(s$lost_before_calving); retained <- sum(s$retained_to_due)
+  ## how much of this cohort the censoring gate would exclude, named not hidden
+  n_rate_ready <- sum(s$rate_ready)
+  n_censored   <- nrow(s) - n_rate_ready
   due <- min(s$first_service, na.rm=TRUE) + GEST      # first calves expected
   last_due <- max(s$first_service, na.rm=TRUE) + GEST # last calves expected
   data.frame(cohort=s$calf_crop[1],          # stored label, not re-derived
@@ -46,6 +49,9 @@ agg <- do.call(rbind, lapply(sort(unique(E$cohort)), function(k){
     bred_from=min(s$first_service, na.rm=TRUE),
     bred_to  =max(s$first_service, na.rm=TRUE),
     exposed=nrow(s),
+    rate_ready=n_rate_ready, censored=n_censored,
+    pct_calved_ready=ifelse(n_rate_ready>0,
+        round(100*sum(s$calved[s$rate_ready])/n_rate_ready,1), NA_real_),
     lost=lost, retained=retained,
     pct_lost=round(100*lost/nrow(s),1),
     calved=sum(s$calved),
@@ -74,6 +80,12 @@ agg$bred_window <- ifelse(same,
 cat("\n=== CALVES PER FEMALE, both denominators, by CALF CROP ===\n")
 print(agg[,c("cohort","bred_window","exposed","lost","pct_lost","retained",
              "calved","pct_calved","pct_calved_ret","cpe","cpr","incomplete")], row.names=FALSE)
+cat("\n=== CENSORING GATE (rate_ready) - what each cohort would lose, named ===\n")
+print(agg[,c("cohort","exposed","rate_ready","censored","pct_calved","pct_calved_ready")],
+      row.names=FALSE)
+cat("censored = season opens before the record horizon or is still open at the pull.\n")
+cat("pct_calved_ready is the rate over uncensored seasons only; the gap between it\n")
+cat("and pct_calved is what censoring was doing to the headline figure.\n")
 cat("\nincomplete cohorts (calves still due after", format(PULL), "):",
     paste(agg$cohort[agg$incomplete], collapse=", "), "\n")
 
@@ -89,11 +101,12 @@ rows <- paste0('{"cohort":',qs(agg$cohort),',"year":',agg$year,',"type":',qs(agg
   ',"leftCensored":',agg$left_censored,'}')
 json <- paste0('{"cohorts":[',paste(rows,collapse=","),']',
   ',"pull":"2026-07-29","gestation":',GEST,
-  ',"totalSeasons":',nrow(CS),',"analysisReady":',sum(CS$analysis_ready),
+  ',"totalSeasons":',nrow(CS),',"intervalReady":',sum(CS$interval_ready),
+  ',"rateReady":',sum(CS$rate_ready),
   ',"unmappedSeasons":',nrow(unmapped),',"unmappedCalved":',sum(unmapped$calved),
   ',"neverServed":',nrow(CS)-exposed_all,
   ',"horizon":"',format(CS$record_horizon[1]),'"',
-  ',"medianInterval":',round(median(CS$calving_interval_days[CS$analysis_ready & !is.na(CS$calving_interval_days)],na.rm=TRUE)),
+  ',"medianInterval":',round(median(CS$calving_interval_days[CS$interval_ready & !is.na(CS$calving_interval_days)],na.rm=TRUE)),
   ',"flags":{',paste(sprintf('%s:%d', qs(sub("^flag_","",grep("^flag_",names(CS),value=TRUE))),
       sapply(grep("^flag_",names(CS),value=TRUE), function(f) sum(CS[[f]],na.rm=TRUE))), collapse=","),'}}')
 writeLines(json, file.path(OUT,"exposure2.json"))
