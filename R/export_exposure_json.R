@@ -41,8 +41,14 @@ agg <- do.call(rbind, lapply(sort(unique(E$cohort)), function(k){
     left_censored=sum(s$flag_left_censored),
     stringsAsFactors=FALSE)
 }))
-agg <- agg[order(agg$year, agg$type), ]
-agg$bred_window <- paste0(format(agg$bred_from,"%b %Y"), " - ", format(agg$bred_to,"%b %Y"))
+## Spring calves drop before Fall calves within the same crop year, so the
+## x axis must run Spring -> Fall, not alphabetically.
+agg <- agg[order(agg$year, factor(agg$type, levels=c("Spring","Fall"))), ]
+## compact breeding window: collapse the year when both ends share it
+same <- format(agg$bred_from,"%Y") == format(agg$bred_to,"%Y")
+agg$bred_window <- ifelse(same,
+  paste0(format(agg$bred_from,"%b"), "-", format(agg$bred_to,"%b %y")),
+  paste0(format(agg$bred_from,"%b %y"), "-", format(agg$bred_to,"%b %y")))
 cat("\n=== CALVES PER EXPOSED FEMALE, labelled by CALF CROP ===\n")
 print(agg[,c("cohort","bred_window","exposed","services","spe","calved","pct_calved","calves","cpe","incomplete")], row.names=FALSE)
 cat("\nincomplete cohorts (calves still due after", format(PULL), "):",

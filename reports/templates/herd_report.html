@@ -122,6 +122,8 @@ table.grid tr.incomplete td{color:var(--ink-3);font-style:italic}
 .croplab{font-size:12.5px;font-weight:700;fill:var(--ink);letter-spacing:.03em;
   font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
   text-transform:uppercase}
+.wlab{font-size:9.5px;fill:var(--ink-3);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .zoombar{display:flex;align-items:center;gap:12px;margin:0 0 7px;flex-wrap:wrap}
 .zoombar button{font:inherit;font-size:12px;padding:3px 10px;border:1px solid var(--rule);
   background:var(--panel);color:var(--ink-2);cursor:pointer}
@@ -427,7 +429,7 @@ function draw(){
 
 /* ================= SECTION 2 ================= */
 function drawExpo(){
-  const W=1240,H=450,M={t:26,r:24,b:84,l:58};
+  const W=1240,H=460,M={t:26,r:24,b:94,l:58};
   const C={bar:cssv("--violin-fill"),deep:cssv("--ui"),alert:cssv("--alert"),axis:cssv("--axis"),
            grid:cssv("--grid"),ink:cssv("--ink-3")};
   const co=EXPO.cohorts, mx=Math.max(...co.map(c=>c.cpe),1.2);
@@ -447,9 +449,9 @@ function drawExpo(){
     /* calf crop is the headline label; the breeding window that produced it sits underneath */
     o.push(`<text class="croplab" x="${X(i)}" y="${H-M.b+17}" text-anchor="middle">${esc(c.type)}</text>`);
     o.push(`<text class="croplab" x="${X(i)}" y="${H-M.b+31}" text-anchor="middle">${c.year}</text>`);
-    const bw=(c.bredWindow||"").replace(/ 20/g," ");
-    o.push(`<text class="tick" x="${X(i)}" y="${H-M.b+47}" text-anchor="middle" fill="${C.ink}">bred ${esc(bw)}</text>`);
-    o.push(`<text class="tick" x="${X(i)}" y="${H-M.b+61}" text-anchor="middle" fill="${C.ink}">n=${c.exposed}</text>`);});
+    o.push(`<text class="wlab" x="${X(i)}" y="${H-M.b+46}" text-anchor="middle">bred</text>`);
+    o.push(`<text class="wlab" x="${X(i)}" y="${H-M.b+58}" text-anchor="middle">${esc(c.bredWindow||"")}</text>`);
+    o.push(`<text class="wlab" x="${X(i)}" y="${H-M.b+72}" text-anchor="middle">n=${c.exposed}</text>`);});
   o.push(`<line x1="${M.l}" y1="${H-M.b}" x2="${W-M.r}" y2="${H-M.b}" stroke="${C.axis}"/>`);
   o.push(`<text class="tick" x="${M.l}" y="${M.t-8}">calves born per female exposed</text>`);
   document.getElementById("xchart").innerHTML=o.join("");
