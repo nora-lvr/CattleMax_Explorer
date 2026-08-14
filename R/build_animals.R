@@ -171,6 +171,26 @@ M$flag_weaning_assumed   <- M$weaning_source %in% c("weaning_weight(EST 205d)","
 M$flag_no_birth_date     <- is.na(M$birth_date)
 M$flag_exit_before_entry <- !is.na(M$exit_date) & !is.na(M$entry_date) & M$exit_date < M$entry_date
 
+## ---- flags added after the 2026-08-14 review -----------------------------
+## The animal kept being recorded after we say it left. Either the exit date
+## is wrong or the child record is. We pick a side (exit precedence) and say so.
+M$days_active_after_exit <- ifelse(!is.na(M$exit_date) & !is.na(M$last_activity_date),
+                                   as.numeric(M$last_activity_date - M$exit_date), NA_real_)
+M$flag_activity_after_exit <- !is.na(M$days_active_after_exit) & M$days_active_after_exit > 0
+## Any date later than the pull is impossible: the export cannot know the future.
+M$flag_date_after_pull <- Reduce(`|`, lapply(
+  c("birth_date","purchase_date","sale_date","death_date","sale_ticket_date",
+    "last_activity_date","weaning_date","first_calving_date","exit_date"),
+  function(cn) !is.na(M[[cn]]) & M[[cn]] > PULL))
+## A recorded (not assumed) weaning date that falls after she left. Left as a
+## data flag rather than corrected, since the recorded date may be the right one.
+M$flag_weaning_after_exit <- !is.na(M$weaning_date) & !is.na(M$exit_date) &
+                             M$weaning_date > M$exit_date
+## A departure with no dated evidence at all - the entire gap between our
+## independent presence count and CattleMax's Active count (see validate_presence.R)
+M$flag_left_undated <- M$status %in% c("Sold","Dead") &
+                       is.na(M$sale_date) & is.na(M$death_date) & is.na(M$sale_ticket_date)
+
 SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
 dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
 f  <- file.path(SILVER,"animals.csv")

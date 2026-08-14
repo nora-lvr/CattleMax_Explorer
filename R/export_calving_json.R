@@ -11,10 +11,19 @@ n <- nrow(C); cat("calves born", format(BASE), "or later:", n, "\n")
 
 j  <- function(x) paste0("[", paste(x, collapse=","), "]")
 qs <- function(x) paste0('"', gsub('"','\\\\"', x), '"')
-dim1 <- function(vals){
-  lv <- sort(unique(vals[!is.na(vals) & vals!=""]))
-  idx <- match(vals, lv); idx[is.na(idx)] <- 0
-  list(lv=lv, idx=idx, counts=as.integer(table(factor(idx, levels=seq_along(lv)))))
+## Every animal with no value for a dimension used to vanish from `counts`,
+## so the counts array did not sum to n and any legend built from it
+## understated its buckets - silently. phase_now alone dropped 2,667 rows
+## (it is NA for every Sold/Dead animal by construction). Blanks are now
+## counted as their own level and named, per the "never drop silently" rule.
+dim1 <- function(vals, blank="(not recorded)"){
+  v  <- ifelse(is.na(vals) | vals=="", NA, vals)
+  lv <- sort(unique(v[!is.na(v)]))
+  idx <- match(v, lv); idx[is.na(idx)] <- length(lv) + 1L   # blanks -> last level
+  lv <- c(lv, blank)
+  list(lv=lv, idx=idx,
+       counts=as.integer(table(factor(idx, levels=seq_along(lv)))),
+       nblank=sum(is.na(v)))
 }
 emit <- function(d) paste0('{"idx":', j(d$idx), ',"names":[', paste(qs(d$lv),collapse=","),
                            '],"counts":', j(d$counts), '}')
@@ -55,5 +64,12 @@ json <- paste0('{',
 
 writeLines(json, file.path(OUT,"calving3.json"))
 cat("wrote calving3.json  bytes:", nchar(json), "\n")
+## every dimension's counts must now account for all n rows
+for (nm in c("phase","sex","status","cat","weaning")) {
+  d <- get(c(phase="PH",sex="SEX",status="STA",cat="CAT",weaning="WS")[[nm]])
+  stopifnot(sum(d$counts) == n)
+  cat(sprintf("  %-8s levels=%-2d counts sum=%d of %d  (blank: %d)\n",
+              nm, length(d$lv), sum(d$counts), n, d$nblank))
+}
 cat("phases:", paste(PH$lv, PH$counts, sep="=", collapse=" "), "\n")
 cat("groups:", length(GN), "  categories:", length(CAT$lv), "\n")

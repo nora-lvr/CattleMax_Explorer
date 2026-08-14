@@ -211,9 +211,17 @@ Donor / Recipient remains an **orthogonal role**, not a phase.
 
 **Weaning precedence:** `weaning_date` → a `measurements` row of category *Weaning* → `weaning_weight`
 present (estimate birth + 205 d) → **age > 8 months** (assume weaned, flag it) → still nursing.
-The age backstop matters: without it, 207 animals over two years old with no weaning record are
-counted as nursing calves. River Creek's own weaning age is tight — median **7.0 months** — and the
-6–8 month bucket is empty, so any threshold in that gap is safe.
+The age backstop matters: without it, **525** animals over two years old with no weaning record are
+counted as nursing calves. River Creek's own recorded weaning age is tight — median **6.8 months**.
+
+**Correction (2026-08-14).** Earlier versions of this section said "207 animals" and claimed the
+6–8 month bucket was empty. Both were wrong: it is 525 animals, and **2,184 of 3,079 recorded
+weaning ages fall between 6 and 8 months**. What is actually empty is the 6–9 month band *among
+animals with no weaning record at this pull date* — an artifact of this herd's calving seasons and
+of this particular pull, not a property of the data. **The 8-month threshold is therefore not safe
+by construction and remains unvalidated** (see §8). Age is measured at **exit**, not at the pull, or
+animals that died young are recorded as weaned because they would have been old enough had they
+lived — that affected 234 animals with a median age at death of 34 days.
 
 ### THE dam-field trap (verified 2026-08-14 — do not re-introduce)
 - **`dam_animal_id` = the female who CARRIED the calf.** Use this as the calving dam.
@@ -243,9 +251,30 @@ after the pull date must be shown as incomplete, never plotted as a collapse. Ri
 Fall season reads 0.004 calves/exposed purely because those calves are not born yet.
 
 ### Validation (must pass before building on it)
-- Reconcile the engine's as-of **active** count against CattleMax's own active count per pull.
-  **PASSED 2026-08-14 on River Creek:** phases at the pull date sum to Calf 325 + Growing 765 +
-  Cow 745 + Breeding 22 = **1,857**, exactly CattleMax's own active count.
+- **Reconcile presence independently — `R/validate_presence.R`.**
+  **A previous version of this section claimed a PASS at exactly 1,857. That check was circular and
+  has been replaced.** `exit_date` is written only for Sold/Dead animals, so "present at the pull"
+  was *identical to* `status == "Active"` by construction — it re-read CattleMax's own answer and
+  could never fail.
+
+  The real check rebuilds presence from **dated evidence only** (birth, purchase, movements, sale
+  tickets, sale and death dates) and never consults `status`. On River Creek it **disagrees, and the
+  disagreement is fully explained**:
+
+  | source | count at 2026-07-29 |
+  |---|---|
+  | CattleMax `status == "Active"` | 1,857 |
+  | `animals.parquet` presence interval | 1,858 |
+  | **independent, dates only** | **2,154** |
+
+  All 297 of the gap run one way: animals CattleMax calls Sold/Dead that have **no sale, death or
+  ticket date at all** (281 Sold, 16 Dead), carried as `flag_left_undated`. **Zero** animals go the
+  other way, so the interval reconstruction itself is sound — the gap measures undated departures,
+  a data-quality fact about the herd record rather than a logic error.
+
+  The script also prints historical as-of counts (825 at 2020-07-29, 1,045 at 2022, 1,224 at 2024).
+  Those cannot be reconciled against CattleMax at all — it publishes only a *current* status — so
+  they are the real test of the interval reconstruction.
 - Invariant tests: splitting a group can't create or lose cattle; presence intervals never overlap
   for one animal; counts across groups sum to the whole.
 - Provenance stamp on every number.
@@ -254,7 +283,9 @@ Fall season reads 0.004 calves/exposed purely because those calves are not born 
 
 ## 7. Findings from real data (Mertz / River Creek export, pulled 2026-07-29)
 
-`data/81258_joe_mertz_202607291020/` — 17,055 animal rows. Concrete facts that shape the build:
+`data/81258_joe_mertz_202607291020/` — **17,052 animal rows** (17,055 raw lines; two records contain
+embedded newlines, which is exactly why a quoted parser is mandatory). Concrete facts that shape the
+build:
 
 - **`status` distribution:** `Reference` 12,182 · `Sold` 2,506 · `Active` 1,857 · `Dead` 507.
   Reference animals are **71% of the file** — excluding them is the biggest single filter.
