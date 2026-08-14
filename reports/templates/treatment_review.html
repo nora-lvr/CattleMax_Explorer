@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Treatment Cleanup Approval</title>
+<style>
+:root{
+  --alert:#944947; --alert-soft:#f4eae9; --ui:#3a3634; --ui-2:#6b6663;
+  --paper:#f6f3f1; --panel:#fffdfc; --ink:#1d1d1d; --ink-2:#5a5350; --ink-3:#8b8280;
+  --rule:#e2dad7; --rule-2:#efe9e7; --ok:#4a6b45; --edit:#fdf6e3; --editline:#b8912f;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --alert:#c98a87; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
+  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
+  --rule:#332c2c; --rule-2:#282222; --ok:#8fb387; --edit:#2b2415; --editline:#c8a54a;}}
+:root[data-theme="dark"]{
+  --alert:#c98a87; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
+  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
+  --rule:#332c2c; --rule-2:#282222; --ok:#8fb387; --edit:#2b2415; --editline:#c8a54a;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+.wrap{max-width:1500px;margin:0 auto;padding:0 24px 60px}
+.cond{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed}
+header{border-bottom:2px solid var(--alert);padding:24px 0 14px;margin-bottom:0}
+h1{margin:0 0 6px;font-size:clamp(21px,2.6vw,30px);font-weight:640;letter-spacing:-.02em}
+.sub{margin:0;color:var(--ink-2);font-size:14.5px;max-width:76ch}
+.stamp{margin-top:11px;display:flex;flex-wrap:wrap;gap:6px 18px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-3)}
+.stamp b{color:var(--ink-2)}
+nav.tabs{display:flex;border-bottom:1px solid var(--rule);margin:0 0 18px}
+nav.tabs button{font:inherit;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.1em;font-weight:700;font-size:13px;background:none;border:none;
+  border-bottom:3px solid transparent;margin-bottom:-1px;padding:11px 18px;color:var(--ink-3);cursor:pointer}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+section[hidden]{display:none}
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+input[type=search],select,textarea{font:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--ink);border-radius:2px}
+input[type=search]{min-width:250px}
+button.act{font:inherit;font-size:13px;padding:6px 14px;border:1px solid var(--ui-2);
+  background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
+button.act:hover{border-color:var(--ink);background:var(--rule-2)}
+button.act.primary{background:var(--ui);color:var(--panel);border-color:var(--ui)}
+.count{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:var(--ink-3)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;text-transform:uppercase;
+  letter-spacing:.08em;font-size:11.5px;color:var(--ink-3);text-align:left;padding:8px 9px;
+  border-bottom:1.5px solid var(--rule);position:sticky;top:0;background:var(--paper);z-index:2;cursor:pointer;
+  white-space:nowrap}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+td{padding:5px 9px;border-bottom:1px solid var(--rule-2);vertical-align:middle}
+tr:hover td{background:var(--rule-2)}
+tr.changed td{background:var(--edit)}
+tr.changed td:first-child{box-shadow:inset 3px 0 0 var(--editline)}
+td.raw{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;font-weight:600}
+td.hint{color:var(--ink-3);font-size:12px;max-width:280px}
+select.cell{width:100%;min-width:150px;padding:3px 5px;font-size:12.5px;border:1px solid transparent;
+  background:transparent;color:var(--ink)}
+select.cell:hover,select.cell:focus{border-color:var(--rule);background:var(--panel)}
+select.cell.ov{border-color:var(--editline);background:var(--panel);font-weight:600}
+.pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:1px 6px;border:1px solid var(--alert);color:var(--alert);border-radius:2px}
+.note{font-size:12.5px;color:var(--ink-3);max-width:84ch;margin:14px 0}
+.out{margin-top:22px;border:1px solid var(--rule);background:var(--panel);padding:14px}
+.out h2{margin:0 0 4px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.09em;font-size:13.5px}
+textarea{width:100%;min-height:210px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;line-height:1.45;white-space:pre}
+.warn{border-left:3px solid var(--alert);background:var(--alert-soft);padding:9px 12px;
+  font-size:12.5px;color:var(--ink-2);margin-bottom:16px}
+:focus-visible{outline:2px solid var(--ui);outline-offset:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Treatment cleanup &mdash; for approval</h1>
+  <p class="sub">Every raw value CattleMax recorded, beside what the pipeline currently maps it to.
+  Change anything that is wrong, then copy the approved mapping out at the bottom. Nothing is applied
+  until that mapping is pasted back into the build.</p>
+  <div class="stamp">
+    <span>herd <b id="s-herd"></b></span><span>pulled <b id="s-pull"></b></span>
+    <span>events <b id="s-n"></b></span><span>medications <b id="s-m"></b></span>
+    <span>diagnoses <b id="s-d"></b></span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" id="t-med" aria-selected="true" aria-controls="s-med">Medications</button>
+  <button role="tab" id="t-dx"  aria-selected="false" aria-controls="s-dx">Diagnoses</button>
+</nav>
+
+<section id="s-med" role="tabpanel">
+  <div class="warn"><b>Intent is derived, not stored.</b> Vaccines, antiparasitics and insecticides count as
+  routine work; antibiotics and anti-inflammatories count as therapeutic; and any product given to an animal
+  that already has a recorded diagnosis is promoted to therapeutic. That last rule is why some drugs show two
+  intents. Change the <i>drug class</i> and the intent follows.</div>
+  <div class="bar">
+    <input type="search" id="q-med" placeholder="Filter medications, class or intent...">
+    <select id="f-cls"><option value="">All drug classes</option></select>
+    <button class="act" id="only-med">Show only changed</button>
+    <span class="count" id="c-med"></span>
+  </div>
+  <table id="tbl-med"></table>
+</section>
+
+<section id="s-dx" role="tabpanel" hidden>
+  <div class="warn"><b>57% of treatment events carry a diagnosis</b>; the rest are blank and stay
+  uncategorised. Grouping only affects the events that have one.</div>
+  <div class="bar">
+    <input type="search" id="q-dx" placeholder="Filter diagnoses or category...">
+    <select id="f-cat"><option value="">All disease categories</option></select>
+    <button class="act" id="only-dx">Show only changed</button>
+    <span class="count" id="c-dx"></span>
+  </div>
+  <table id="tbl-dx"></table>
+</section>
+
+<div class="out">
+  <h2>Approved mapping</h2>
+  <p class="note" id="out-note">Make a change above and the exact overrides appear here. Copy this and hand
+  it back &mdash; it is applied to <code>R/treatment_map.R</code> as explicit per-value rules that take
+  precedence over the pattern matching.</p>
+  <div class="bar">
+    <button class="act primary" id="copy">Copy to clipboard</button>
+    <button class="act" id="reset">Reset all changes</button>
+    <span class="count" id="c-changed"></span>
+  </div>
+  <textarea id="out" readonly spellcheck="false"></textarea>
+</div>
+</div>
+
+<script>
+const D = /*__DATA__*/;
+const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const ORIG={med:{},dx:{}};
+D.meds.forEach(m=>ORIG.med[m.raw]=m.cls);
+D.dx.forEach(d=>ORIG.dx[d.raw]=d.cat);
+/* EDIT.int holds an EXPLICIT intent override; "" means keep the derived value */
+const EDIT={med:{},dx:{},int:{}};
+
+document.getElementById("s-herd").textContent=D.herd;
+document.getElementById("s-pull").textContent=D.pulled;
+document.getElementById("s-n").textContent=D.totalEvents.toLocaleString();
+document.getElementById("s-m").textContent=D.meds.length;
+document.getElementById("s-d").textContent=D.dx.length;
+
+/* derived intent mirrors TREATMENT_INTENT() in R/treatment_map.R */
+function intentOf(cls, withDx, n){
+  let base;
+  if(["Vaccine","Antiparasitic","Insecticide"].includes(cls)) base="Routine / preventative";
+  else if(cls==="Repro hormone") base="Reproductive management";
+  else if(["Antibiotic","Anti-inflammatory"].includes(cls)) base="Therapeutic";
+  else if(cls==="Supportive care") base="Supportive";
+  else if(cls==="Not a product") base="Not a treatment";
+  else base="Unclassified";
+  if(withDx>0 && base==="Routine / preventative")
+    return withDx===n ? "Therapeutic" : "Therapeutic / Routine (split by diagnosis)";
+  if(cls==="Supportive care" && withDx>0)
+    return withDx===n ? "Therapeutic" : "Therapeutic / Supportive (split by diagnosis)";
+  return base;
+}
+const sel=(opts,cur,kind,raw)=>`<select class="cell" data-kind="${kind}" data-raw="${esc(raw)}">`+
+  opts.map(o=>`<option${o===cur?" selected":""}>${esc(o)}</option>`).join("")+`</select>`;
+
+let SORT={med:{k:"n",dir:-1},dx:{k:"n",dir:-1}};
+const MEDCOLS=[["raw","Raw medication",""],["n","Events","num"],["animals","Animals","num"],
+  ["cls","Drug class &rarr;",""],["intent","Intent &rarr;",""],["withDx","With dx","num"],
+  ["topdx","Top diagnoses","hint"],["route","Route","hint"],["last","Last used","hint"]];
+const DXCOLS=[["raw","Raw diagnosis",""],["n","Events","num"],["animals","Animals","num"],
+  ["cat","Disease category &rarr;",""],["topmed","Usual medication","hint"],
+  ["phase","Common phase","hint"],["last","Last seen","hint"]];
+
+function rows(kind){
+  const src = kind==="med" ? D.meds : D.dx;
+  const q = document.getElementById(kind==="med"?"q-med":"q-dx").value.toLowerCase();
+  const f = document.getElementById(kind==="med"?"f-cls":"f-cat").value;
+  const onlyCh = document.getElementById(kind==="med"?"only-med":"only-dx").dataset.on==="1";
+  let r = src.map(o=>{
+    const cur = kind==="med" ? (EDIT.med[o.raw]??o.cls) : (EDIT.dx[o.raw]??o.cat);
+    let changed = cur !== (kind==="med"?ORIG.med[o.raw]:ORIG.dx[o.raw]);
+    let derived=null, intentOv=null;
+    if(kind==="med"){
+      derived  = intentOf(cur,o.withDx,o.n);
+      intentOv = EDIT.int[o.raw] || "";
+      if(intentOv) changed = true;
+    }
+    return {...o, cur, changed, derivedIntent:derived, intentOverride:intentOv,
+      intent: kind==="med" ? (intentOv || derived) : null};
+  });
+  if(f) r=r.filter(o=>o.cur===f);
+  if(onlyCh) r=r.filter(o=>o.changed);
+  if(q) r=r.filter(o=>[o.raw,o.cur,o.intent,o.topdx,o.topmed].join(" ").toLowerCase().includes(q));
+  const s=SORT[kind];
+  r.sort((a,b)=>{const x=s.k==="cls"||s.k==="cat"?a.cur:a[s.k], y=s.k==="cls"||s.k==="cat"?b.cur:b[s.k];
+    return (typeof x==="number"? x-y : String(x).localeCompare(String(y)))*s.dir;});
+  return r;
+}
+function render(kind){
+  const cols = kind==="med"?MEDCOLS:DXCOLS;
+  const opts = kind==="med"?D.classes:D.diseases;
+  const r = rows(kind);
+  const head="<thead><tr>"+cols.map(c=>{
+    const s=SORT[kind]; const arr=(s.k===c[0]||(s.k==="cls"&&c[0]==="cls")||(s.k==="cat"&&c[0]==="cat"))?(s.dir<0?" ▾":" ▴"):"";
+    return `<th class="${c[2]}" data-k="${c[0]}" data-kind="${kind}">${c[1]}${arr}</th>`;}).join("")+"</tr></thead>";
+  const body="<tbody>"+r.map(o=>"<tr class='"+(o.changed?"changed":"")+"'>"+cols.map(c=>{
+    if(c[0]==="raw")  return `<td class="raw">${esc(o.raw)}${o.changed?' <span class="pill">edited</span>':""}</td>`;
+    if(c[0]==="cls")  return `<td>${sel(opts,o.cur,"med",o.raw)}</td>`;
+    if(c[0]==="cat")  return `<td>${sel(opts,o.cur,"dx",o.raw)}</td>`;
+    if(c[0]==="intent"){
+      const opts=[`<option value=""${o.intentOverride?"":" selected"}>(derived) ${esc(o.derivedIntent)}</option>`]
+        .concat(D.intents.map(i=>`<option value="${esc(i)}"${o.intentOverride===i?" selected":""}>${esc(i)}</option>`));
+      return `<td><select class="cell${o.intentOverride?" ov":""}" data-kind="int" data-raw="${esc(o.raw)}">${opts.join("")}</select></td>`;}
+    return `<td class="${c[2]}">${esc(o[c[0]])}</td>`;}).join("")+"</tr>").join("")+"</tbody>";
+  document.getElementById(kind==="med"?"tbl-med":"tbl-dx").innerHTML=head+body;
+  const tot = kind==="med"?D.meds.length:D.dx.length;
+  document.getElementById(kind==="med"?"c-med":"c-dx").textContent=
+    `${r.length} of ${tot} shown · ${r.reduce((a,o)=>a+o.n,0).toLocaleString()} events`;
+  writeOut();
+}
+function writeOut(){
+  const m=Object.entries(EDIT.med).filter(([k,v])=>v!==ORIG.med[k]);
+  const d=Object.entries(EDIT.dx).filter(([k,v])=>v!==ORIG.dx[k]);
+  const i=Object.entries(EDIT.int).filter(([k,v])=>v);
+  document.getElementById("c-changed").textContent=
+    `${m.length} drug class${m.length===1?"":"es"}, ${i.length} intent${i.length===1?"":"s"}, `+
+    `${d.length} diagnos${d.length===1?"is":"es"} changed`;
+  if(!m.length && !d.length && !i.length){document.getElementById("out").value=
+    "# No changes yet. Adjust a drug class, an intent, or a disease category above.";return;}
+  const q=s=>'"'+String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"';
+  let o="## Approved by Nora - explicit per-value overrides.\n";
+  o+="## Exact matches; these take precedence over the regex rules in treatment_map.R.\n";
+  o+="## An INTENT override is absolute: it applies to every event of that\n";
+  o+="## medication, including the diagnosis-promotion rule.\n\n";
+  o+="MEDICATION_CLASS_OVERRIDES <- c(\n";
+  o+=m.map(([k,v])=>`  ${q(k)} = ${q(v)}`).join(",\n")+(m.length?"\n":"")+")\n\n";
+  o+="MEDICATION_INTENT_OVERRIDES <- c(\n";
+  o+=i.map(([k,v])=>`  ${q(k)} = ${q(v)}`).join(",\n")+(i.length?"\n":"")+")\n\n";
+  o+="DIAGNOSIS_OVERRIDES <- c(\n";
+  o+=d.map(([k,v])=>`  ${q(k)} = ${q(v)}`).join(",\n")+(d.length?"\n":"")+")\n";
+  document.getElementById("out").value=o;
+}
+document.addEventListener("change",e=>{
+  const s=e.target.closest("select.cell"); if(!s)return;
+  const k=s.dataset.kind;
+  if(k==="int"){ if(s.value) EDIT.int[s.dataset.raw]=s.value; else delete EDIT.int[s.dataset.raw]; }
+  else EDIT[k][s.dataset.raw]=s.value;
+  render(k==="dx"?"dx":"med");
+});
+document.addEventListener("click",e=>{
+  const th=e.target.closest("th[data-k]");
+  if(th){const kind=th.dataset.kind,k=th.dataset.k;
+    const s=SORT[kind]; s.dir = (s.k===k)? -s.dir : (["n","animals","withDx"].includes(k)?-1:1);
+    s.k=k; render(kind); return;}
+  const tab=e.target.closest("nav.tabs button");
+  if(tab){document.querySelectorAll("nav.tabs button").forEach(b=>{
+    const on=b===tab;b.setAttribute("aria-selected",on?"true":"false");
+    document.getElementById(b.getAttribute("aria-controls")).hidden=!on;});}
+});
+["q-med","f-cls"].forEach(id=>document.getElementById(id).addEventListener("input",()=>render("med")));
+["q-dx","f-cat"].forEach(id=>document.getElementById(id).addEventListener("input",()=>render("dx")));
+[["only-med","med"],["only-dx","dx"]].forEach(([id,kind])=>{
+  const b=document.getElementById(id); b.dataset.on="0";
+  b.addEventListener("click",()=>{b.dataset.on=b.dataset.on==="1"?"0":"1";
+    b.textContent=b.dataset.on==="1"?"Show all":"Show only changed"; render(kind);});});
+document.getElementById("reset").addEventListener("click",()=>{
+  EDIT.med={};EDIT.dx={};EDIT.int={};render("med");render("dx");});
+document.getElementById("copy").addEventListener("click",async()=>{
+  const t=document.getElementById("out"); t.select();
+  try{await navigator.clipboard.writeText(t.value);}catch(_){document.execCommand("copy");}
+  const b=document.getElementById("copy"); const o=b.textContent;
+  b.textContent="Copied"; setTimeout(()=>b.textContent=o,1200);});
+
+D.classes.forEach(c=>document.getElementById("f-cls").add(new Option(c,c)));
+D.diseases.forEach(c=>document.getElementById("f-cat").add(new Option(c,c)));
+render("med"); render("dx");
+</script>
+</body>
+</html>

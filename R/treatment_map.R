@@ -26,7 +26,11 @@ DRUG_CLASS_RULES <- list(
   list(cls="Insecticide",        pat="insect control|\\bfly\\b|pour-?on"),
   list(cls="Repro hormone",      pat="lutalyse|cystorelin|estrumate|factrel|gonabreed|cidr|prostagland|oxytocin"),
   list(cls="Supportive care",    pat="electrolyte|re-?sorb|bluelite|probios|fluids|milk replacer|bolus|vit |vitamin|multimin|b complex|b 12|k1|a d e|corid|amprol|microbial"),
-  list(cls="Not a product",      pat="^dead$|took the vet|^n/?a$")
+  list(cls="Not a product",      pat="^dead$|took the vet|^n/?a$"),
+  ## catch-all for real products that fit none of the classes above.
+  ## Reached only when nothing else matches, so it replaces "Unclassified"
+  ## for anything that IS a treatment but has no obvious class.
+  list(cls="Other treatment",    pat=".")
 )
 
 ## ---- WHY it was given: the routine vs therapeutic axis ----
@@ -46,6 +50,10 @@ TREATMENT_INTENT <- function(drug_class, diagnosis, medication){
   intent[drug_class %in% "Supportive care"] <- ifelse(
     has_dx[drug_class %in% "Supportive care"], "Therapeutic", "Supportive")
   intent[drug_class %in% "Not a product"] <- "Not a treatment"
+  ## "Other treatment": a real product with no clear class. Follow the
+  ## diagnosis - with one it is therapeutic, without one it stays Other.
+  intent[drug_class %in% "Other treatment"] <- ifelse(
+    has_dx[drug_class %in% "Other treatment"], "Therapeutic", "Other treatment")
 
   ## a recorded diagnosis promotes preventative products to therapeutic:
   ## e.g. a pinkeye bacterin given to an animal already diagnosed with pinkeye
