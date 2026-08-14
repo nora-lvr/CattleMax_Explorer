@@ -46,7 +46,8 @@ ph <- function(i){
 T$phase_at_treatment <- vapply(seq_len(nrow(T)), ph, character(1))
 
 ## ---- what was given, and why ----
-T$medication  <- tx$medication
+T$medication  <- tx$medication                       # raw, verbatim
+T$active_substance <- active_substance(tx$medication) # standardised
 T$drug_class  <- classify_drug(tx$medication)
 T$diagnosis   <- tx$diagnosis
 T$disease_category <- classify_disease(tx$diagnosis)

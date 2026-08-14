@@ -9,10 +9,15 @@ dir.create(DER, showWarnings=FALSE, recursive=TRUE)
 rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
 d10 <- function(x) as.Date(substr(x,1,10))
 D8  <- function(n) as.Date(rep(NA_real_,n), origin="1970-01-01")
-mn  <- function(df,idc,dtc,ids){ v<-tapply(as.integer(d10(df[[dtc]])), df[[idc]], min, na.rm=TRUE)
-                                 as.Date(v[ids], origin="1970-01-01") }
-mxd <- function(df,idc,dtc,ids){ v<-tapply(as.integer(d10(df[[dtc]])), df[[idc]], max, na.rm=TRUE)
-                                 as.Date(v[ids], origin="1970-01-01") }
+## tapply(min/max, na.rm=TRUE) returns +/-Inf when every date in a group is NA.
+## Left unguarded that reached arrow as int32 underflow and was written into
+## animals.parquet as the year -5877641 (181 rows, silently, with no flag).
+## De-Inf inside the helpers so no caller can forget.
+.deinf <- function(v){ v[!is.finite(v)] <- NA_real_; as.Date(v, origin="1970-01-01") }
+mn  <- function(df,idc,dtc,ids){ v<-suppressWarnings(tapply(as.integer(d10(df[[dtc]])), df[[idc]], min, na.rm=TRUE))
+                                 .deinf(as.numeric(v[ids])) }
+mxd <- function(df,idc,dtc,ids){ v<-suppressWarnings(tapply(as.integer(d10(df[[dtc]])), df[[idc]], max, na.rm=TRUE))
+                                 .deinf(as.numeric(v[ids])) }
 PULL <- as.Date("2026-07-29")
 
 aAll<-rd("animals.csv"); st<-rd("sale_tickets.csv"); mv<-rd("movements.csv")
@@ -48,6 +53,10 @@ M$last_activity_date <- as.Date(la, origin="1970-01-01")
 M$first_movement_date <- mn(mv,"animal_id","movement_date",id)
 
 ## ---- WEANING, by documented precedence ----
+## Named constants, not buried literals, so they are configurable when this
+## moves to Python. NEITHER IS VALIDATED BY NORA YET - see PLAN.md §8.
+WEAN_FALLBACK_DAYS  <- 205   # conventional 205-day weaning age
+WEAN_ASSUME_AGE_MO  <- 8     # older than this with no record => assume weaned
 mw   <- ms[grepl("^wean", ms$category, ignore.case=TRUE), ]
 mwd  <- mn(mw,"animal_id","measure_date",id)
 hasw <- function(x) !is.na(x)
@@ -57,9 +66,19 @@ wdate <- take(wdate, d10(a$weaning_date), "weaning_date")
 wdate <- take(wdate, mwd,                 "weaning_measurement")
 i <- is.na(wdate) & hasw(a$weaning_weight) & hasw(M$birth_date)
 wdate[i] <- M$birth_date[i]+205; wsrc[i] <- "weaning_weight(EST 205d)"
-age_mo <- as.numeric(PULL - M$birth_date)/30.44
-i <- is.na(wdate) & !is.na(age_mo) & age_mo > 8
-wdate[i] <- M$birth_date[i]+205; wsrc[i] <- "age>8mo(ASSUMED 205d)"
+## Age must be measured at the point the animal LEFT, not at the pull date.
+## Measuring at the pull assumed 234 animals were weaned - median 34 days old
+## at death - purely because they would have been over 8 months had they lived.
+## exit_date is resolved further down, so recompute the raw departure here.
+.left_on <- suppressWarnings(pmin(d10(a$sale_date), d10(a$death_date), na.rm=TRUE))
+.left_on[!is.finite(as.numeric(.left_on))] <- NA
+asof   <- as.Date(ifelse(is.na(.left_on), PULL, .left_on), origin="1970-01-01")
+age_mo <- as.numeric(asof - M$birth_date)/30.44
+i <- is.na(wdate) & !is.na(age_mo) & age_mo > WEAN_ASSUME_AGE_MO
+wdate[i] <- M$birth_date[i]+WEAN_FALLBACK_DAYS; wsrc[i] <- "age>8mo(ASSUMED 205d)"
+## never let an assumed weaning date land after the animal had already gone
+i2 <- !is.na(wdate) & !is.na(.left_on) & wdate > .left_on & grepl("ASSUMED|EST", wsrc)
+wdate[i2] <- NA; wsrc[i2] <- NA
 wsrc[is.na(wdate)] <- "none(still nursing)"
 M$weaning_date <- wdate; M$weaning_source <- wsrc
 

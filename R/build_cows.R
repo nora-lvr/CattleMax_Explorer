@@ -39,10 +39,19 @@ cat("RECORD HORIZON used:", format(HORIZON), "\n\n")
 ##                        genetic_dam_animal_id in 453 of 458 cases (the DONOR)
 ## Using real_dam credits the donor with her recipients' calvings and makes a
 ## recipient herd look barren, so it must NOT be used as the calving dam.
+## The real_dam FALLBACK has been REMOVED. It fired on 28 calf records and
+## every one of them had real_dam == genetic_dam, i.e. it credited a DONOR
+## with a calving - precisely the trap this comment block exists to prevent.
+## A calf with no dam_animal_id has no known carrier and must be dropped from
+## the cow-season table rather than attributed to the wrong female.
 realdam <- aAll$real_dam_animal_id
 gdam    <- aAll$genetic_dam_animal_id
-dam_use <- ifelse(!is.na(aAll$dam_animal_id), aAll$dam_animal_id, realdam)
-dam_src <- ifelse(!is.na(aAll$dam_animal_id), "dam_animal_id(carrier)", "real_dam(fallback)")
+dam_use <- aAll$dam_animal_id
+dam_src <- ifelse(!is.na(dam_use), "dam_animal_id(carrier)", NA_character_)
+n_no_carrier <- sum(is.na(aAll$dam_animal_id) & !is.na(realdam) &
+                    !is.na(d10(aAll$birth_date)))
+cat("calf records with NO carrier dam (dropped, not attributed to real_dam):",
+    n_no_carrier, "\n")
 calves <- data.frame(calf_id = aAll$id,
                      dam     = dam_use,
                      dam_source = dam_src,
@@ -57,21 +66,39 @@ calves <- calves[order(calves$dam, calves$cbd), ]
 cat("calving events by dam source:\n"); print(table(calves$dam_source))
 
 ## ---- collapse same-birth clusters (twins / multiples) into ONE calving ----
+## Two defects fixed here, both found in review 2026-08-14:
+##  (a) the cluster window must be measured from the FIRST calf of the cluster,
+##      not the previous calf. cumsum(diff(d) > W) chains, so calves 5 days
+##      apart in a run merged into one 34-day "event" of up to 19 calves.
+##  (b) the collapsed EVENT DATE has to be written back onto each calf row.
+##      Previously only n_born was merged back, so the season loop still saw
+##      the original per-calf dates: a 3-calf cluster on 3 consecutive days
+##      emitted 3 seasons EACH claiming 3 calves. Calf counts ran ~36% high
+##      (4,420 real records reported as 6,453) and produced 1-day intervals.
+TWIN_WINDOW_DAYS <- 7          # <-- NOT YET VALIDATED BY NORA (see PLAN.md §8)
 calves$grp <- NA_integer_
-sp <- split(seq_len(nrow(calves)), calves$dam)
-for (ix in sp) {
-  d <- calves$cbd[ix]; g <- cumsum(c(1, as.numeric(diff(d)) > 7))
+for (ix in split(seq_len(nrow(calves)), calves$dam)) {
+  d <- calves$cbd[ix]; g <- integer(length(d)); k <- 1L; anchor <- d[1]
+  for (i in seq_along(d)) {
+    if (as.numeric(d[i] - anchor) > TWIN_WINDOW_DAYS) { k <- k + 1L; anchor <- d[i] }
+    g[i] <- k
+  }
   calves$grp[ix] <- g
 }
-cl <- aggregate(cbd ~ dam + grp, calves, min)
+cl <- aggregate(cbd ~ dam + grp, calves, min); names(cl)[3] <- "event_date"
 nb <- aggregate(calf_id ~ dam + grp, calves, length); names(nb)[3] <- "n_born"
 cl <- merge(cl, nb, by=c("dam","grp"))
-cl <- cl[order(cl$dam, cl$cbd), ]
+cl <- cl[order(cl$dam, cl$event_date), ]
 cat("\ncalving EVENTS after collapsing multiples:", nrow(cl),
     " (from", nrow(calves), "calf records)\n")
 cat("events with >1 calf (twins/multiples):", sum(cl$n_born>1),
-    " max calves in one event:", max(cl$n_born), "\n\n")
-calves <- merge(calves, cl[,c("dam","grp","n_born")], by=c("dam","grp"), all.x=TRUE)
+    " max calves in one event:", max(cl$n_born), "\n")
+cat("widest cluster span (days):",
+    max(tapply(as.numeric(calves$cbd), paste(calves$dam,calves$grp),
+               function(v) max(v)-min(v))), "\n\n")
+## event_date now travels with every calf row, so the season loop groups on it
+calves <- merge(calves, cl[,c("dam","grp","event_date","n_born")],
+                by=c("dam","grp"), all.x=TRUE)
 
 ## ---- which females get seasons: ever calved OR ever exposed ----
 ever_calved  <- unique(calves$dam)
@@ -83,13 +110,18 @@ svc_by <- split(br, br$animal_id)
 cal_by <- split(calves, calves$dam)
 pc_by  <- split(pc, pc$animal_id)
 
-rows <- vector("list", nrow(fem))
+## NB: start empty. This was pre-allocated to nrow(fem) and then appended to,
+## leaving 1,993 leading NULLs that only survived because do.call(rbind, ...)
+## silently drops them - it would break under rbindlist/bind_rows.
+rows <- list()
 for (k in seq_len(nrow(fem))) {
   f  <- fem[k, ]; aid <- f$animal_id
   cs <- cal_by[[aid]]; sv <- svc_by[[aid]]; pk <- pc_by[[aid]]
-  ## one entry per calving EVENT (multiples already collapsed)
-  ev <- if (!is.null(cs)) unique(cs[order(cs$cbd), c("grp","cbd","n_born")]) else NULL
-  cdates <- if (!is.null(ev)) ev$cbd else as.Date(character(0))
+  ## one entry per calving EVENT. Group on event_date (the cluster's first
+  ## calf), never on the raw per-calf date, or multiples re-expand into
+  ## separate seasons.
+  ev <- if (!is.null(cs)) unique(cs[order(cs$event_date), c("grp","event_date","n_born")]) else NULL
+  cdates <- if (!is.null(ev)) ev$event_date else as.Date(character(0))
 
   ## season 1 start: entry into the breeding herd
   s1 <- if (!is.null(sv) && nrow(sv)) min(sv$bdate, na.rm=TRUE) else f$entry_date
@@ -108,13 +140,21 @@ for (k in seq_len(nrow(fem))) {
       if (!is.na(f$exit_date)) { en <- f$exit_date; outcome <- "Exited without calving" }
       else                     { en <- PULL;        outcome <- "Open at pull date" }
     } else outcome <- "Calved"
-    if (is.na(st) || is.na(en) || en < st) next
+    ## a zero-length season carries no information and produced 24 junk rows
+    ## (2 of them flagged as calvings); drop them rather than emit them
+    if (is.na(st) || is.na(en) || en <= st) next
 
+    ## Half-open window [start, end): a service recorded ON a calving date
+    ## belongs to the NEXT season, not to both. Closed-both-ends previously
+    ## double-counted 17 services.  The final open season keeps its end
+    ## inclusive so nothing falls off the end of the timeline.
+    lastseason <- (i == nsz)
     s <- if (!is.null(sv) && nrow(sv)) {
-           sv[sv$bdate >= st & sv$bdate <= en, , drop=FALSE]
+           sv[sv$bdate >= st & (if (lastseason) sv$bdate <= en else sv$bdate < en),
+              , drop=FALSE]
          } else br[0, , drop=FALSE]
     npc   <- if (!is.null(pk)) sum(pk$cdate >= st & pk$cdate <= en, na.rm=TRUE) else 0L
-    calf  <- if (calved) cs[cs$cbd == en, ][1, ] else NULL
+    calf  <- if (calved) cs[cs$event_date == en, ][1, ] else NULL
 
     rows[[length(rows)+1]] <- data.frame(
       animal_id   = aid,

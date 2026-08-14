@@ -61,6 +61,12 @@ TREATMENT_INTENT <- function(drug_class, diagnosis, medication){
   intent[promote] <- "Therapeutic"
 
   intent[is.na(intent)] <- "Unclassified"
+  ## Nora's explicit intent overrides win over everything above, including
+  ## the diagnosis promotion.
+  if (length(MEDICATION_INTENT_OVERRIDES) && !missing(medication)) {
+    hit <- match(medication, names(MEDICATION_INTENT_OVERRIDES))
+    intent[!is.na(hit)] <- unname(MEDICATION_INTENT_OVERRIDES[hit[!is.na(hit)]])
+  }
   intent
 }
 
@@ -81,6 +87,100 @@ DISEASE_RULES <- list(
   list(cat="Nonspecific",         pat="^unsure$|not coming up to feed|^fever$")
 )
 
+## =================================================================
+## APPROVED BY NORA 2026-08-14 via the treatment review sheet.
+## Exact per-value matches; these take precedence over the regex rules above.
+## An INTENT override is absolute - it applies to every event of that
+## medication, including the diagnosis-promotion rule.
+## Trailing spaces in some keys are REAL: they exist in the raw CattleMax
+## values and the match is exact, so do not tidy them away.
+## =================================================================
+MEDICATION_CLASS_OVERRIDES <- c(
+  "Sustain III Calf Bolus"            = "Antibiotic",
+  "Sustain III Cattle Bolus"          = "Antibiotic",
+  "Sustain 3 calf bolus "             = "Antibiotic",
+  "Corid"                             = "Other treatment",
+  "Bluelite Replenish Electrolytes "  = "Other treatment",
+  "Sx calf oral electrolyte "         = "Other treatment",
+  "Vit B Complex"                     = "Other treatment",
+  "Vit A D E"                         = "Other treatment",
+  "Vit B 12"                          = "Other treatment",
+  "Vit K1"                            = "Other treatment",
+  "Vit-E&AD, Vit K1, & Vit B complex" = "Other treatment",
+  "Uterine bolus "                    = "Other treatment",
+  "Scour Bolus"                       = "Other treatment",
+  "Fluids"                            = "Other treatment"
+)
+
+MEDICATION_INTENT_OVERRIDES <- c(
+  "Corid"                             = "Therapeutic",
+  "Vit B Complex"                     = "Therapeutic",
+  "Powdered Tetracycline "            = "Therapeutic",
+  "Vit A D E"                         = "Therapeutic",
+  "Vit B 12"                          = "Therapeutic",
+  "Vit K1"                            = "Therapeutic",
+  "Vit-E&AD, Vit K1, & Vit B complex" = "Therapeutic",
+  "Uterine bolus "                    = "Therapeutic",
+  "Sustain 3 calf bolus "             = "Therapeutic",
+  "Scour Bolus"                       = "Therapeutic",
+  "Fluids"                            = "Therapeutic"
+)
+
+DIAGNOSIS_OVERRIDES <- character(0)
+
+## ---- ACTIVE SUBSTANCE ----------------------------------------------------
+## The raw `medication` is kept verbatim, but the same drug arrives under
+## brand names, alternate spellings and case variants ("Dexamethasone" /
+## "dexamethasone", "Draxxin" / "Tulathromyicn", "RE-SORB" / "Re-sorb & Milk
+## Replacer"). This collapses them to the ACTIVE SUBSTANCE so a report can
+## count a drug once. First match wins; anything unmatched keeps a tidied
+## version of its own raw value and is reported by the build.
+ACTIVE_SUBSTANCE_RULES <- list(
+  list(sub="tulathromycin",      pat="draxxin|tulathro"),
+  list(sub="florfenicol",        pat="nuflor|florfenicol|resflor"),
+  list(sub="oxytetracycline",    pat="noromycin|biomycin|liquamycin|oxytetracycl|terramycin|powdered tetracycline|tetracycline"),
+  list(sub="ceftiofur",          pat="excede|naxcel|spectramast"),
+  list(sub="enrofloxacin",       pat="baytr"),
+  list(sub="danofloxacin",       pat="advocin|a180"),
+  list(sub="penicillin",         pat="combi-?pen|penicillin|pen ?g"),
+  list(sub="sulfamethazine",     pat="sustain|sulfamethazine|albon|sulfadime"),
+  list(sub="flunixin",           pat="banamine|flunixin|prevail"),
+  list(sub="dexamethasone",      pat="dexameth"),
+  list(sub="isoflupredone",      pat="predef|isoflupredone"),
+  list(sub="meloxicam",          pat="meloxicam"),
+  list(sub="amprolium",          pat="corid|amprol"),
+  list(sub="eprinomectin",       pat="eprinex|long ?range"),
+  list(sub="doramectin",         pat="dectomax"),
+  list(sub="ivermectin",         pat="ivermectin|ivomec"),
+  list(sub="moxidectin",         pat="cydectin"),
+  list(sub="fenbendazole",       pat="safe-?guard|fenbendazole|panacur"),
+  list(sub="oxfendazole",        pat="synanthic|oxfendazole"),
+  list(sub="permethrin",         pat="permectrin|clean[ -]?up|pour-?on insectic|permethrin"),
+  list(sub="dinoprost",          pat="lutalyse|prostagland|dinoprost"),
+  list(sub="gonadorelin",        pat="cystorelin|factrel|gonabreed|gonadorelin"),
+  list(sub="oral electrolytes",  pat="electrolyte|re-?sorb|bluelite|resorb"),
+  list(sub="oral probiotic",     pat="probios|microbial"),
+  list(sub="trace minerals",     pat="multimin|trace min"),
+  list(sub="vitamins",           pat="^vit|vitamin|b complex"),
+  ## vaccines: keep them separated by what they protect against
+  list(sub="vaccine: BRD viral (IBR/BVD/PI3/BRSV)", pat="bovi-shield|triangle|nasalgen|pyramid|vista|express|virashield|bovine rhinotracheitis"),
+  list(sub="vaccine: clostridial", pat="alpha 7|covexin|bar-vac|clostridium|blackleg"),
+  list(sub="vaccine: pinkeye",   pat="bovoculi|moraxl|pink ?eye"),
+  list(sub="vaccine: wart",      pat="wart"),
+  list(sub="not a product",      pat="^dead$|took the vet|^n/?a$")
+)
+active_substance <- function(x){
+  out <- rep(NA_character_, length(x))
+  has <- !is.na(x) & trimws(x) != ""
+  for (r in ACTIVE_SUBSTANCE_RULES) {
+    hit <- has & is.na(out) & grepl(r$pat, x, ignore.case=TRUE, perl=TRUE)
+    out[hit] <- r$sub
+  }
+  ## unmatched: keep a tidied form of the raw value so nothing is lost
+  out[has & is.na(out)] <- tolower(trimws(x[has & is.na(out)]))
+  out
+}
+
 .match_first <- function(x, rules, field){
   out <- rep(NA_character_, length(x))
   has <- !is.na(x) & trimws(x) != ""
@@ -91,5 +191,13 @@ DISEASE_RULES <- list(
   }
   out
 }
-classify_drug    <- function(x) .match_first(x, DRUG_CLASS_RULES, "cls")
-classify_disease <- function(x) .match_first(x, DISEASE_RULES,    "cat")
+.apply_override <- function(v, x, ov){
+  if (!length(ov)) return(v)
+  hit <- match(x, names(ov))
+  v[!is.na(hit)] <- unname(ov[hit[!is.na(hit)]])
+  v
+}
+classify_drug    <- function(x) .apply_override(.match_first(x, DRUG_CLASS_RULES, "cls"),
+                                                x, MEDICATION_CLASS_OVERRIDES)
+classify_disease <- function(x) .apply_override(.match_first(x, DISEASE_RULES, "cat"),
+                                                x, DIAGNOSIS_OVERRIDES)
