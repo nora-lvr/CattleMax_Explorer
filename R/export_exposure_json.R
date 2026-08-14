@@ -18,8 +18,15 @@ agg <- do.call(rbind, lapply(sort(unique(E$cohort)), function(k){
   s <- E[E$cohort==k, ]
   due <- min(s$first_service, na.rm=TRUE) + GEST      # first calves expected
   last_due <- max(s$first_service, na.rm=TRUE) + GEST # last calves expected
-  data.frame(cohort=k,
-    year=as.integer(substr(k,1,4)), type=sub("^\\d+ ","",k),
+  ## Label cohorts by CALF CROP, not by breeding season: a cow bred in the
+  ## Nov 2025 - Jan 2026 window calves Aug-Oct 2026, which the industry (and
+  ## Nora) calls the Fall 2026 calf crop. Crop year = breeding year + 1.
+  byear <- as.integer(substr(k,1,4)); btype <- sub("^\\d+ ","",k)
+  data.frame(cohort=paste0(btype," ",byear+1),
+    year=byear+1L, type=btype,
+    breeding_season=k,
+    bred_from=min(s$first_service, na.rm=TRUE),
+    bred_to  =max(s$first_service, na.rm=TRUE),
     exposed=nrow(s),
     calved=sum(s$calved),
     calves=sum(ifelse(is.na(s$n_calves_born),0,s$n_calves_born)),
@@ -35,14 +42,16 @@ agg <- do.call(rbind, lapply(sort(unique(E$cohort)), function(k){
     stringsAsFactors=FALSE)
 }))
 agg <- agg[order(agg$year, agg$type), ]
-cat("\n=== CALVES PER EXPOSED FEMALE (from cow-seasons) ===\n")
-print(agg[,c("cohort","exposed","services","spe","calved","pct_calved","calves","cpe","incomplete")], row.names=FALSE)
+agg$bred_window <- paste0(format(agg$bred_from,"%b %Y"), " - ", format(agg$bred_to,"%b %Y"))
+cat("\n=== CALVES PER EXPOSED FEMALE, labelled by CALF CROP ===\n")
+print(agg[,c("cohort","bred_window","exposed","services","spe","calved","pct_calved","calves","cpe","incomplete")], row.names=FALSE)
 cat("\nincomplete cohorts (calves still due after", format(PULL), "):",
     paste(agg$cohort[agg$incomplete], collapse=", "), "\n")
 
 j <- function(x) paste0("[", paste(x, collapse=","), "]")
 qs<- function(x) paste0('"', gsub('"','\\\\"',x), '"')
 rows <- paste0('{"cohort":',qs(agg$cohort),',"year":',agg$year,',"type":',qs(agg$type),
+  ',"bredWindow":',qs(agg$bred_window),',"breedingSeason":',qs(agg$breeding_season),
   ',"exposed":',agg$exposed,',"calved":',agg$calved,',"calves":',agg$calves,
   ',"cpe":',agg$cpe,',"pctCalved":',agg$pct_calved,',"services":',agg$services,
   ',"spe":',agg$spe,',"incomplete":',tolower(as.character(agg$incomplete)),
