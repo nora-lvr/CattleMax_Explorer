@@ -95,7 +95,8 @@ cm_config <- function(pull = NULL, root = NULL, pull_date = NULL) {
     twin_window_days   = 7,     # calves within this of the cluster start are one calving
     wean_fallback_days = 205,   # conventional weaning age
     wean_assume_age_mo = 8,     # older than this with no record => assume weaned
-    explorer_from      = as.Date("2013-01-01")  # earliest year shown in the explorer
+    explorer_from      = as.Date("2013-01-01"), # earliest year shown in the explorer
+    report_from_year   = 2020   # earliest cohort year shown in trended reports
   )
   dir.create(cfg$silver,  showWarnings = FALSE, recursive = TRUE)
   dir.create(cfg$derived, showWarnings = FALSE, recursive = TRUE)

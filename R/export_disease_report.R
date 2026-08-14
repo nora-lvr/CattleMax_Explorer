@@ -96,7 +96,9 @@ trend <- list(); current <- list()
 for (ph in PHASES) {
   pr <- PR[PR$phase == ph, ]; if (!nrow(pr)) next
   cs <- CS_ph[[ph]]; if (is.null(cs)) cs <- C[0, ]
-  ords <- sort(unique(pr$cohort_sort))
+  ## trended reports start at cfg$report_from_year; earlier cohorts sit in the
+  ## ragged start of the record and are excluded here, and named below
+  ords <- sort(unique(pr$cohort_sort[pr$cohort_year >= cfg$report_from_year]))
   ## the top diseases for this phase, so a trend line means something
   top <- names(head(sort(table(cs$disease), decreasing = TRUE), 5))
   for (o in ords) {
@@ -157,6 +159,8 @@ json <- jobj(
   jp("deathWindow", C$death_window_days[1]),
   jp("cfr", round(100*mean(C$case_fatal),1)),
   jp("noLocation", sum(C$flag_no_location)),
+  jp("fromYear", cfg$report_from_year),
+  jp("cohortsBefore", sum(PR$cohort_year < cfg$report_from_year)),
   jp("herd", jq(cfg$herd)), jp("pull", jq(cfg$pull)),
   jp("pulled", jq(format(cfg$pull_date))),
   jp("brand", jq(cfg$brand)), jp("brandDeep", jq(cfg$brand_deep)),

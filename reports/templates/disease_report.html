@@ -67,6 +67,12 @@ svg{display:block;width:100%;height:auto}
 .warn{border-left:3px solid var(--alert);background:var(--alert-soft);padding:11px 14px;font-size:13px;
   color:var(--ink-2);margin:14px 0}
 .note{font-size:12.5px;color:var(--ink-3);max-width:84ch;margin:10px 0}
+.facets{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:6px}
+.facet{border:1px solid var(--rule-2);padding:8px 10px 4px;background:var(--panel)}
+.facet h4{margin:0 0 1px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-weight:700;color:var(--ink)}
+.facet p.fcap{margin:0 0 4px;font-size:11px;color:var(--ink-3);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .tick{font-size:10.5px;fill:var(--axis);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .slab{font-size:11.5px;font-weight:700;fill:var(--ink-2)}
 @media print{body{background:#fff}.wrap{max-width:none}h2{page-break-after:avoid}.card{page-break-inside:avoid}}
@@ -104,9 +110,11 @@ and will rise as they age. They are the ones you can still act on.</p>
 <p class="note" id="cur-note"></p>
 
 <h2>Trend across cohorts</h2>
-<p class="lede">Each point is a group that entered the phase together. Comparing groups rather than
-calendar years keeps a Spring and a Fall calving from being averaged into one meaningless number.
-Hollow points are cohorts still in the phase.</p>
+<p class="lede">Each point is a group that entered the phase together, so a Spring and a Fall calving
+are never averaged into one number that describes neither. <b>One panel per disease, each on its own
+scale</b> &mdash; the patterns differ far more than the levels do. Hollow points are cohorts still in
+the phase, whose figures will rise.</p>
+<p class="note" id="trend-note"></p>
 <div id="trend"></div>
 
 <h2>How much disease, by production phase</h2>
@@ -171,42 +179,65 @@ document.getElementById("cur-note").textContent=
   D.current.map(c=>`${c.cohort} ${c.phase.toLowerCase()}: ${c.openInPhase} of ${c.animals} still in phase, median ${c.medianDays} days in so far`).join("; ")+
   ". Because they have not finished, every figure here can only go up.";
 
-/* ---- trend across cohorts ---- */
-const TW=1100,TH=230,TM={t:18,r:120,b:44,l:52};
+document.getElementById("trend-note").textContent=
+  `Trends start at ${D.fromYear}. ${D.cohortsBefore.toLocaleString()} animal-phases began before `+
+  `that and are excluded here — they sit in the ragged start of the CattleMax record, where `+
+  `treatments were not yet being captured, so including them would show a false improvement.`;
+
+/* ---- trend across cohorts, FACETED BY DISEASE with free y axes ---- */
+const TW=520,TH=190,TM={t:20,r:14,b:46,l:46};
 document.getElementById("trend").innerHTML=PH.map(p=>{
   const all=D.trend.filter(t=>t.phase===p);
-  const overall=all.filter(t=>t.disease==null).sort((a,b)=>a.sort-b.sort);
-  if(overall.length<2)return"";
-  const dzs=[...new Set(all.filter(t=>t.disease!=null).map(t=>t.disease))].slice(0,3);
-  const C={ink:cssv("--ink"),bar:cssv("--bar"),alert:cssv("--alert"),
-           grid:cssv("--grid"),axis:cssv("--axis"),panel:cssv("--panel"),lab:cssv("--ink-3")};
-  const xs=overall.map(o=>o.sort);
-  const series=[{name:"any disease",col:C.ink,pts:overall.map(o=>({x:o.sort,y:o.anyDisease,open:o.openInPhase>o.animals*0.5}))}]
-    .concat(dzs.map((dz,i)=>({name:dz,col:i===0?C.alert:C.bar,
-      pts:all.filter(t=>t.disease===dz).sort((a,b)=>a.sort-b.sort)
-             .map(o=>({x:o.sort,y:o.attack,open:o.openInPhase>o.animals*0.5}))})));
-  const mx=Math.max(...series.flatMap(s=>s.pts.map(q=>q.y)),5)*1.15;
-  const X=v=>TM.l+(xs.indexOf(v)/(xs.length-1||1))*(TW-TM.l-TM.r);
-  const Y=v=>TH-TM.b-(v/mx)*(TH-TM.t-TM.b);
-  let o="";
-  [0,mx/2,mx].forEach(v=>{o+=`<line x1="${TM.l}" y1="${Y(v)}" x2="${TW-TM.r}" y2="${Y(v)}" stroke="${C.grid}"/>
-    <text class="tick" x="${TM.l-7}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(0)}%</text>`;});
-  series.forEach(s=>{
-    if(s.pts.length>1)o+=`<polyline points="${s.pts.map(q=>`${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(" ")}"
-      fill="none" stroke="${s.col}" stroke-width="2"/>`;
-    s.pts.forEach(q=>{o+=q.open
-      ? `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4.5" fill="${C.panel}" stroke="${s.col}" stroke-width="2"/>`
-      : `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4" fill="${s.col}"/>`;});
-    const last=s.pts[s.pts.length-1];
-    if(last)o+=`<text class="slab" x="${X(last.x)+9}" y="${Y(last.y)+4}" fill="${s.col}">${esc(s.name)}</text>`;});
-  overall.forEach(q=>{o+=`<text class="tick" x="${X(q.sort).toFixed(1)}" y="${TH-TM.b+15}" text-anchor="middle">${esc(q.cohort.split(" ")[0])}</text>
-    <text class="tick" x="${X(q.sort).toFixed(1)}" y="${TH-TM.b+27}" text-anchor="middle">${esc(q.cohort.split(" ")[1])}</text>
-    <text class="tick" x="${X(q.sort).toFixed(1)}" y="${TH-TM.b+39}" text-anchor="middle" fill="${C.lab}">n=${q.animals}</text>`;});
-  o+=`<line x1="${TM.l}" y1="${TH-TM.b}" x2="${TW-TM.r}" y2="${TH-TM.b}" stroke="${C.axis}"/>`;
+  const cohorts=[...new Set(all.map(t=>t.sort))].sort((a,b)=>a-b);
+  if(cohorts.length<2)return"";
+  const lbl={}; all.forEach(t=>{lbl[t.sort]=t.cohort;});
+  const nAn={}; all.filter(t=>t.disease==null).forEach(t=>{nAn[t.sort]=t.animals;});
+  const dzs=[...new Set(all.filter(t=>t.disease!=null).map(t=>t.disease))];
+  const C={alert:cssv("--alert"),grid:cssv("--grid"),axis:cssv("--axis"),
+           panel:cssv("--panel"),lab:cssv("--ink-3"),ink:cssv("--ink")};
+  /* each disease gets its OWN y scale: a 2% disease and a 20% one cannot
+     share an axis without the small one flattening to nothing */
+  const facets=dzs.map(dz=>{
+    const pts=cohorts.map(c=>{
+      const r=all.find(t=>t.sort===c&&t.disease===dz);
+      return r?{x:c,y:r.attack,open:r.openInPhase>r.animals*0.5,n:r.animals,
+                cases:r.cases,fatal:r.fatal,day:r.medDay}:null;}).filter(Boolean);
+    if(!pts.length||pts.every(q=>q.y===0))return"";
+    const mx=Math.max(...pts.map(q=>q.y),1)*1.25;
+    const X=v=>TM.l+(cohorts.indexOf(v)/(cohorts.length-1||1))*(TW-TM.l-TM.r);
+    const Y=v=>TH-TM.b-(v/mx)*(TH-TM.t-TM.b);
+    let o="";
+    [0,mx/2,mx].forEach(v=>{o+=`<line x1="${TM.l}" y1="${Y(v)}" x2="${TW-TM.r}" y2="${Y(v)}" stroke="${C.grid}"/>
+      <text class="tick" x="${TM.l-6}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(mx<5?1:0)}%</text>`;});
+    o+=`<polyline points="${pts.map(q=>`${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(" ")}"
+      fill="none" stroke="${C.alert}" stroke-width="2"/>`;
+    pts.forEach(q=>{o+=q.open
+      ? `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4.5" fill="${C.panel}" stroke="${C.alert}" stroke-width="2"/>`
+      : `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4" fill="${C.alert}"/>`;});
+    /* label only the first and last point so small facets stay readable */
+    [pts[0],pts[pts.length-1]].forEach((q,i)=>{ if(!q)return;
+      o+=`<text class="tick" x="${X(q.x)+(i?-4:4)}" y="${Y(q.y)-8}" text-anchor="${i?"end":"start"}"
+        fill="${C.ink}">${q.y.toFixed(1)}%</text>`;});
+    cohorts.forEach((c,i)=>{ if(cohorts.length>6 && i%2) return;
+      const t=(lbl[c]||"").split(" ");
+      o+=`<text class="tick" x="${X(c).toFixed(1)}" y="${TH-TM.b+14}" text-anchor="middle">${esc(t[0]||"")}</text>
+          <text class="tick" x="${X(c).toFixed(1)}" y="${TH-TM.b+25}" text-anchor="middle">${esc(t[1]||"")}</text>`;});
+    o+=`<line x1="${TM.l}" y1="${TH-TM.b}" x2="${TW-TM.r}" y2="${TH-TM.b}" stroke="${C.axis}"/>`;
+    const tot=pts.reduce((a,q)=>a+q.cases,0), ft=pts.reduce((a,q)=>a+q.fatal,0);
+    const days=pts.map(q=>q.day).filter(v=>v!=null);
+    return `<div class="facet"><h4>${esc(dz)}</h4>
+      <p class="fcap">${tot} cases${ft?", "+ft+" died":""}${days.length?" · typically day "+
+        Math.round(days.reduce((a,b)=>a+b,0)/days.length):""}</p>
+      <svg viewBox="0 0 ${TW} ${TH}" role="img" aria-label="${esc(dz)} trend">${o}</svg></div>`;
+  }).filter(Boolean).join("");
+  if(!facets)return"";
+  const ns=cohorts.map(c=>`${esc(lbl[c])} n=${nAn[c]||"?"}`).join(" · ");
   return `<div class="card"><h3>${esc(p)}</h3>
-    <p class="cap">% of each entry cohort treated at least once. Hollow = more than half the group
-    is still in the phase, so the point will rise.</p>
-    <svg viewBox="0 0 ${TW} ${TH}" role="img" aria-label="disease trend by cohort">${o}</svg></div>`;
+    <p class="cap">% of each entry cohort treated for that disease at least once.
+    <b>Each panel has its own scale</b> so a small disease is not flattened by a large one.
+    Hollow points are cohorts still in the phase, so those figures will rise.</p>
+    <p class="cap" style="color:var(--ink-3)">cohort sizes &mdash; ${ns}</p>
+    <div class="facets">${facets}</div></div>`;
 }).join("");
 
 /* incidence table, grouped by phase */
