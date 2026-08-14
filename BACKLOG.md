@@ -27,17 +27,21 @@ Source: three independent pipeline reviews, 2026-08-14 (accuracy · completeness
       `flag_long_interval` / `flag_short_interval` be part of it — is a 1-day or 1,431-day
       interval ever analysis-ready?
 
-### 1B. Claude does in parallel (no decision needed)
+### 1B. Claude does in parallel — **DONE** (commit 29c0fa9)
 
-- [ ] Replace the **circular 1,857 reconciliation** with a real one: rebuild presence from
-      movements/sale tickets *without* consulting `status`. It currently cannot fail.
-- [ ] Correct **wrong figures in PLAN.md**: "17,055 animal rows" (actually 17,052); "the 6–8 month
-      bucket is empty" (2,184 of 3,079 land there); "207 animals over two years old" (525); and the
-      phase counts, which moved to Calf 305 / Growing 786 after the twins fix.
-- [ ] **`export_calving_json.R` NA counts** don't sum to `n` — every legend understates its buckets.
-- [ ] **Missing flags**: 791 animals have child-table activity after their exit date; one death date
-      and one movement fall *after* the pull; `flag_placeholder_birth` is computed and never used.
-- [ ] 34 animals still carry an **assumed weaning date after they left** (was 234).
+- [x] Replaced the **circular 1,857 reconciliation** with `R/validate_presence.R`, which rebuilds
+      presence from dated evidence only and never consults `status`. It now disagrees — 2,154 vs
+      1,857 — and the whole 297 gap is departures with no recorded date (281 Sold, 16 Dead), zero
+      the other way. Also prints historical as-of counts CattleMax cannot answer at all.
+- [x] Corrected **three wrong figures in PLAN.md**, all mine: 17,055 → 17,052 rows; "207 animals
+      over two years old" → 525; "the 6–8 month bucket is empty" → 2,184 of 3,079 land there, so
+      the 8-month threshold is **not** safe by construction and stays unvalidated.
+- [x] **`export_calving_json.R`** — blanks are now their own named level, with an assertion that
+      each dimension's counts sum to `n`. `phase_now` alone had been dropping 2,667 rows.
+- [x] **Four new flags**: `activity_after_exit` (791, median 20 d), `date_after_pull` (1),
+      `weaning_after_exit` (42), `left_undated` (308).
+- [x] The 34 remaining assumed-weaning-after-exit turned out to be **recorded** weaning dates, not
+      assumed ones, so they are flagged rather than overwritten — the recorded date may be right.
 
 ---
 
