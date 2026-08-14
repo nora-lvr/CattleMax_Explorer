@@ -55,6 +55,7 @@ h2{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condens
 .kb{display:flex;align-items:flex-end;justify-content:center;height:100%}
 .kbar{display:block;width:100%;background:var(--bar-2);min-height:2px}
 .kbar.now{background:var(--ui)}
+.kbar.thin{background:var(--bar-2);opacity:.28}
 .kbar.none{height:2px;background:var(--rule)}
 .kyrs{display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -133,7 +134,9 @@ tr.dormant td.rawdx{color:var(--ink-3)}
 <div class="stats" id="tops"></div>
 <p class="note">Bars show each year from <span id="k-from"></span> to <span id="k-to"></span>; the
 darker bar is the latest. <b>Case fatality</b> is deaths among animals treated for that disease.
-<b>Incidence</b> is the share of all animals at risk that year treated for it at least once. A
+<b>Incidence</b> is the share of all animals at risk that year treated for it at least once.
+Faint bars are years built on fewer than <span id="k-min"></span> cases &mdash; still shown, but too
+thin to rely on, so the headline value and the arrow are never taken from them. A
 <b>case</b> is a run of therapeutic treatments on one animal for one disease &mdash; treatments
 closer together than the episode gap are the same case, so counting treatments instead would
 inflate every figure by the re-treatment rate.</p>
@@ -201,32 +204,41 @@ document.getElementById("s-last").textContent=D.lastCase;
 const KYRS=D.kpiYears||[];
 document.getElementById("k-from").textContent=KYRS[0];
 document.getElementById("k-to").textContent=KYRS[KYRS.length-1];
+document.getElementById("k-min").textContent=(D.kpis[0]||{}).minCases||10;
 document.getElementById("tops").innerHTML=D.kpis.map(k=>{
   const s=k.series.map(v=>v==null?null:+v);
   const mx=Math.max(...s.filter(v=>v!=null),1);
   const w=100/s.length;
+  const rel=k.reliable||s.map(()=>true);
+  const curIdx=KYRS.indexOf(k.currentYear);
   const bars=s.map((v,i)=>{
-    const yr=KYRS[i], last=i===s.length-1;
-    if(v==null)return `<div class="kb" style="width:${w}%"><span class="kbar none"></span></div>`;
-    return `<div class="kb" style="width:${w}%" title="${yr}: ${v.toFixed(1)}${k.unit} (n=${k.counts[i]})">
-      <span class="kbar${last?" now":""}" style="height:${Math.max(3,(v/mx)*100).toFixed(1)}%"></span></div>`;
+    const yr=KYRS[i], thin=!rel[i];
+    if(v==null)return `<div class="kb" style="width:${w}%"><span class="kbar none"
+      title="${yr}: no cases"></span></div>`;
+    /* thin years stay visible but faint, and never carry the 'now' emphasis */
+    return `<div class="kb" style="width:${w}%" title="${yr}: ${v.toFixed(1)}${k.unit} from ${k.counts[i]} case${k.counts[i]===1?"":"s"}${thin?" — too few to rely on":""}">
+      <span class="kbar${thin?" thin":(i===curIdx?" now":"")}"
+        style="height:${Math.max(3,(v/mx)*100).toFixed(1)}%"></span></div>`;
   }).join("");
   const dir = (k.previous==null||k.current==null) ? "" :
     (k.current>k.previous ? "up" : k.current<k.previous ? "down" : "flat");
   const arrow = dir==="up"?"▲":dir==="down"?"▼":dir==="flat"?"■":"";
   /* for these four, up is bad and down is good */
   const bad = dir==="up";
-  const n = k.counts[k.counts.length-1];
+  const n = curIdx>=0 ? k.counts[curIdx] : 0;
+  const fatalN = curIdx>=0 ? k.fatalCounts[curIdx] : 0;
   return `<div class="stat kpi${bad?" hot":""}">
     <div class="k">${esc(k.label)}</div>
     <div class="v">${k.current==null?"&mdash;":k.current.toFixed(1)+k.unit}
       <span class="delta ${dir}">${arrow}</span></div>
     <div class="kchart">${bars}</div>
     <div class="kyrs"><span>${KYRS[0]}</span><span>${KYRS[KYRS.length-1]}</span></div>
-    <div class="n">${k.kind==="fatality"
-        ? n+" death"+(n===1?"":"s")+" of "+k.counts[k.counts.length-1]+" cases"
-        : "of "+(k.denom[k.denom.length-1]||0).toLocaleString()+" animals at risk"}${
-        k.partial?" · "+k.currentYear+" part year":""}</div>
+    <div class="n">${k.currentYear==null ? "no year has "+k.minCases+" cases yet"
+      : k.kind==="fatality"
+        ? fatalN+" death"+(fatalN===1?"":"s")+" of "+n+" cases in "+k.currentYear
+        : n+" of "+(curIdx>=0?k.denom[curIdx]:0).toLocaleString()+" animals at risk in "+k.currentYear}${
+        k.partial?" · part year":""}${
+        k.thinYears?` · ${k.thinYears} faint year${k.thinYears===1?"":"s"} under ${k.minCases} cases`:""}</div>
   </div>`;}).join("");
 
 /* ---- the groups on the ground now ---- */

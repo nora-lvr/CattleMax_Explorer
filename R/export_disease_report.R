@@ -211,21 +211,33 @@ kpi_n <- function(dz, fatal=FALSE){
     k <- C[C$disease == dz & C$onset_year == y, ]
     if (fatal) sum(k$case_fatal) else nrow(k)}, numeric(1))
 }
+## A year built on a handful of cases is not a trend. 100% BRD fatality in
+## 2021 was one case and one death. Such years are still SHOWN - nothing is
+## hidden - but they are marked unreliable so the report can draw them faintly
+## and, critically, never take the headline value or the direction arrow from
+## them.
+MIN_CASES <- 10
 mkkpi <- function(label, dz, kind, unit){
   s <- if (kind == "fatality") kpi_fatality(dz) else kpi_incidence(dz)
-  n <- kpi_n(dz, fatal = kind == "fatality")
-  ## "current" is the latest year with data; the pull year is partial and said so
-  ok <- which(!is.na(s))
+  n <- kpi_n(dz)                                   # cases, the stability driver
+  rel <- !is.na(s) & n >= MIN_CASES
+  ## headline and direction come only from years that clear the threshold
+  ok  <- which(rel)
   cur <- if (length(ok)) s[max(ok)] else NA_real_
   prev<- if (length(ok) > 1) s[ok[length(ok)-1]] else NA_real_
+  cy  <- if (length(ok)) KY[max(ok)] else NA_integer_
   jobj(jp("label", jq(label)), jp("disease", jq(dz)), jp("kind", jq(kind)),
        jp("unit", jq(unit)),
        jp("current", ifelse(is.na(cur), "null", cur)),
        jp("previous", ifelse(is.na(prev), "null", prev)),
-       jp("currentYear", KY[max(ok)]),
-       jp("partial", tolower(as.character(KY[max(ok)] == max(KY)))),
+       jp("currentYear", ifelse(is.na(cy), "null", cy)),
+       jp("partial", tolower(as.character(!is.na(cy) && cy == max(KY)))),
+       jp("minCases", MIN_CASES),
+       jp("thinYears", sum(!is.na(s) & n < MIN_CASES)),
        jp("series", jarr(ifelse(is.na(s), "null", s))),
+       jp("reliable", jarr(tolower(as.character(rel)))),
        jp("counts", jarr(n)),
+       jp("fatalCounts", jarr(kpi_n(dz, fatal = TRUE))),
        jp("denom",  jarr(at_risk)))
 }
 kpis <- c(
