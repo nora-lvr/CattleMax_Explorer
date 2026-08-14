@@ -80,6 +80,13 @@ svg{display:block;width:100%;height:auto}
 .comptbl th{font-size:10.5px;padding:6px 13px}
 .comptbl td{padding:4px 13px}
 td.rawdx{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:400}
+.spark{height:22px;width:auto;max-width:150px;display:block;margin-left:auto}
+.sparkcell{padding-top:6px;padding-bottom:2px}
+.sparkhead{text-align:right;min-width:150px}
+td.yr{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-3)}
+tr.dormant td.rawdx{color:var(--ink-3)}
+.tag-old{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  padding:1px 5px;border:1px solid var(--alert);color:var(--alert);border-radius:2px;white-space:nowrap}
 .facets{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:6px}
 .facet{border:1px solid var(--rule-2);padding:8px 10px 4px;background:var(--panel)}
 .facet h4{margin:0 0 1px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
@@ -329,19 +336,36 @@ document.getElementById("tbl-dis").innerHTML=
     <td>${d.relapsed}</td><td>${d.medianTx}</td></tr>`).join("")+"</tbody>";
 
 /* ---- what each disease group is made of ---- */
+const CY=D.compYears||[];
+const spark=(s,dormant)=>{
+  const mx=Math.max(...s,1), w=9, h=22, gap=2;
+  const bars=s.map((v,i)=>{
+    const bh=v?Math.max(2,(v/mx)*h):0;
+    return v?`<rect x="${i*(w+gap)}" y="${(h-bh).toFixed(1)}" width="${w}" height="${bh.toFixed(1)}"
+      fill="${dormant?"var(--ink-3)":"var(--bar)"}" fill-opacity="${dormant?.45:.85}"/>`
+      :`<rect x="${i*(w+gap)}" y="${h-1}" width="${w}" height="1" fill="var(--rule)"/>`;}).join("");
+  return `<svg class="spark" viewBox="0 0 ${s.length*(w+gap)} ${h}" role="img"
+    aria-label="use over time">${bars}</svg>`;
+};
 document.getElementById("composition").innerHTML = D.composition.map(c=>{
   const mx = Math.max(...c.parts.map(p=>p.events), 1);
-  const rows = c.parts.map(p=>`<tr>
-      <td class="rawdx">${esc(p.raw)}</td>
+  const rows = c.parts.map(p=>`<tr class="${p.dormant?"dormant":""}">
+      <td class="rawdx">${esc(p.raw)}${p.dormant?' <span class="tag-old">not used since '+p.lastYear+'</span>':""}</td>
       <td class="bar-cell"><span class="b" style="width:${(p.events/mx*90).toFixed(1)}px"></span>
         <span>${p.events}</span></td>
-      <td>${p.animals}</td></tr>`).join("");
-  return `<details class="comp"${c.nRaw>1?"":" "}>
+      <td>${p.animals}</td>
+      <td class="sparkcell">${spark(p.series,p.dormant)}</td>
+      <td class="yr">${esc(String(p.first).slice(0,7))}</td>
+      <td class="yr">${esc(String(p.last).slice(0,7))}</td></tr>`).join("");
+  return `<details class="comp">
     <summary><span class="cname">${esc(c.disease)}</span>
       <span class="cmeta">${c.events.toLocaleString()} treatments from
-      ${c.nRaw} raw diagnos${c.nRaw===1?"is":"es"}</span></summary>
+      ${c.nRaw} raw diagnos${c.nRaw===1?"is":"es"}${c.dormantRaw?
+        ` &middot; <b style="color:var(--alert)">${c.dormantRaw} no longer in use</b>`:""}</span></summary>
     <table class="comptbl"><thead><tr><th>Raw diagnosis as recorded</th>
-      <th>Treatments</th><th>Animals</th></tr></thead><tbody>${rows}</tbody></table>
+      <th>Treatments</th><th>Animals</th>
+      <th class="sparkhead">Use by year &mdash; ${CY[0]} to ${CY[CY.length-1]}</th>
+      <th>First</th><th>Last</th></tr></thead><tbody>${rows}</tbody></table>
   </details>`;
 }).join("");
 

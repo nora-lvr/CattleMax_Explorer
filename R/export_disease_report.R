@@ -151,23 +151,39 @@ TXa <- cm_read_silver(cfg, "treatments")
 th2 <- TXa[TXa$treatment_intent %in% "Therapeutic", ]
 th2$cat <- ifelse(is.na(th2$disease_category), "Unknown disease", th2$disease_category)
 th2$raw <- ifelse(is.na(th2$diagnosis), "(no diagnosis recorded)", th2$diagnosis)
+## Use over time per raw diagnosis, so a term the practice has stopped using
+## is visible rather than being silently carried forward as if current.
+th2$yr <- as.integer(format(th2$treatment_date, "%Y"))
+YRS <- seq(min(th2$yr, na.rm=TRUE), max(th2$yr, na.rm=TRUE))
 comp <- list()
 for (k in names(sort(table(th2$cat), decreasing = TRUE))) {
   s <- th2[th2$cat == k, ]
   tb <- sort(table(s$raw), decreasing = TRUE)
   parts <- vapply(names(tb), function(rw) {
-    jobj(jp("raw", jq(rw)), jp("events", as.integer(tb[[rw]])),
-         jp("animals", length(unique(s$animal_id[s$raw == rw]))))
+    r <- s[s$raw == rw, ]
+    cnt <- as.integer(table(factor(r$yr, levels = YRS)))
+    last_yr <- max(r$yr, na.rm=TRUE)
+    jobj(jp("raw", jq(rw)), jp("events", nrow(r)),
+         jp("animals", length(unique(r$animal_id))),
+         jp("first", jq(format(min(r$treatment_date)))),
+         jp("last",  jq(format(max(r$treatment_date)))),
+         jp("lastYear", last_yr),
+         ## dormant = not used in the most recent full year or since
+         jp("dormant", tolower(as.character(last_yr < max(YRS) - 1))),
+         jp("series", jarr(cnt)))
   }, character(1))
   comp[[length(comp)+1]] <- jobj(
     jp("disease", jq(k)),
     jp("events",  nrow(s)),
     jp("nRaw",    length(tb)),
+    jp("dormantRaw", sum(vapply(names(tb), function(rw)
+        max(s$yr[s$raw == rw], na.rm=TRUE) < max(YRS) - 1, logical(1)))),
     jp("parts",   jarr(parts)))
 }
 
 json <- jobj(
   jp("composition", jarr(unlist(comp))),
+  jp("compYears", jarr(YRS)),
   jp("trend",   jarr(unlist(trend))),
   jp("current", jarr(unlist(current))),
   jp("incidence", jarr(unlist(inc))),
