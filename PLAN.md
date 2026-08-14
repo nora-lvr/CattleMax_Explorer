@@ -134,6 +134,66 @@ A "group" can be any combination of grouping variables, but the main functional 
 These are **derived** from `animal_type` + `sex` + age + `category` + group-membership + intent — not
 a single column.
 
+### Exit-date rule (derived from real data, 2026-08-13)
+Resolve an animal's departure date in this precedence order:
+1. `sale_date` / `death_date` on the animal record
+2. **join `sale_ticket_id` → `sale_tickets.sale_date`** (recovered 129 of 437 missing in River Creek)
+3. **last real activity** — max of last movement / measurement / treatment / breeding / note
+4. **Never `updated_at`** — it is a bulk record-edit stamp, not a departure. In River Creek, animals
+   whose real activity stopped 2016–2019 carry an `updated_at` of 2025-12-14; using it would keep
+   them "present" 6+ years too long.
+
+Every exit date must carry **which rule produced it**, so reports can distinguish known from
+estimated departures.
+
+### Class & role taxonomy (worked out against River Creek, 2026-08-13)
+
+**Two orthogonal dimensions**, not one. Both derived time-accurately — never read from
+`category_id`, which is a *current snapshot* and is wrong for historical dates.
+
+**Dimension 1 — class** (from sex + life events):
+| class | rule |
+|---|---|
+| Nursing calf | entry → `weaning_date` (fallback: birth + 205 d) |
+| Replacement heifer | weaning → first calving |
+| Cow | from first calving onward; **first calving = earliest `birth_date` among her calves** via `dam_animal_id` |
+| Sale bull | weaning → first breeding use (or exit) |
+| Herd sire | from **first use as a sire** onward (`breedings.bull_animal_id`) |
+| Steer | weaning onward, where `sex == "Steer"` |
+
+**Bulls are split by destiny, not age.** An 18-month cut was tested and rejected: only 35 of 1,657
+bulls were ever used as sires; sold bulls' age at sale (median 16.3 mo) and sires' age at first use
+(median 17.9 mo, range 12.8–47.3) overlap almost completely. In a seedstock herd a bull is a
+*product*, so use — not months — separates the groups.
+
+**Dimension 2 — reproductive role** (orthogonal; a cow may be Donor, Recipient, or neither):
+| role | rule |
+|---|---|
+| Donor | from first flush (`flushes.flush_date`) or embryo collection (`embryos.animal_id`) onward |
+| Recipient | from first ET breeding onward (`breedings.embryo_id` present) |
+| None | otherwise |
+
+Derived roles beat the snapshot category: in River Creek the category field catches 163 recipients
+but misses ~39 more (and ~50 donors) filed under generic "Total Herd Enrollment" categories.
+
+### Data-quality flags (required, surfaced in reports)
+The engine must **count and expose missing/estimated inputs**, and reports must show a notice when
+they exceed a threshold. Minimum flag set:
+- animals with no exit date after all fallbacks (River Creek: 308 of 4,870 non-reference)
+- exit dates that are **estimated** (rule 3) vs recorded (rules 1–2)
+- animals missing `birth_date` (River Creek: 177 of 1,857 active)
+- animals with no movement history at all
+- any denominator whose members are >X% estimated → warn rather than silently report a rate
+- **impossible class × role combinations** — e.g. "Nursing calf + Recipient" (2 in River Creek),
+  which implies a bad ET breeding date or a missing `weaning_date` firing the 205-day fallback
+- sale/death date earlier than birth date (seen in River Creek bulls)
+
+**Policy: flag, don't chase.** The engine surfaces these counts so a report can raise a notice when
+the share is material; we do not hand-investigate individual animals.
+
+This follows the mySYNCH chartability discipline (§5.4): **name what's uncertain, never drop it
+silently.**
+
 ### Validation (must pass before building on it)
 - Reconcile the engine's as-of **active** count against CattleMax's own active count per pull (e.g.
   1,857 Active in the Mertz export).
