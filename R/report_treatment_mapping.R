@@ -1,8 +1,12 @@
 ## Transparency report: every raw CattleMax value and what it became.
 ## Run this after build_treatments.R to audit the classification.
 options(width=230)
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-T <- as.data.frame(arrow::read_parquet(file.path(SILVER,"treatments.parquet")))
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+T <- cm_read_silver(cfg, "treatments")
 
 line <- function(ch="=") cat(strrep(ch, 150), "\n")
 

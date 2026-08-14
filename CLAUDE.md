@@ -56,7 +56,11 @@ Donor/Recipient is an orthogonal **role**, not a phase.
    returned 100% by construction. A gate is not a denominator: after passing it you still choose
    **exposed** or **retained** (PLAN.md §6).
 10. **Charts greyscale; brand colour only for the few genuinely interesting things.**
-11. **NEVER silently discard anything.** If a record falls out of a table or a report, it is
+11. **Veterinary scope only — animals and health.** No sale prices, no revenue, no cost, no
+    margin, no marketing analysis. Economics is not this practice's arena and is out of scope
+    (Nora, 2026-08-14). Sale *weight* and *reason for sale* are in scope — they are a growth
+    measurement and a health/culling reason. Sale *price* is not.
+12. **NEVER silently discard anything.** If a record falls out of a table or a report, it is
     recorded in the **exclusions ledger** (`R/exclusions.R` → `data/silver-data/exclusions.parquet`)
     with what it was, why it went, how many, and whether a rule change could recover it. A report
     that excludes records without naming them is not finished. This is Nora's standing rule

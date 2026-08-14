@@ -1,7 +1,11 @@
 ## Export the explorer's JSON from the SILVER parquet - the single substrate.
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data/animals.parquet"
-OUT    <- "C:/Users/lives/AppData/Local/Temp/claude/C--GIT-CattleMax-Explorer/2076ae99-6a88-45b1-927a-6cdd341f08b4/scratchpad"
-M <- as.data.frame(arrow::read_parquet(SILVER))
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+OUT <- cfg$derived
+M <- cm_read_silver(cfg, "animals")
 cat("read", nrow(M), "animals from silver parquet\n")
 
 BASE <- as.Date("2013-01-01")

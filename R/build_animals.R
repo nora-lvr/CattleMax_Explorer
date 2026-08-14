@@ -3,22 +3,17 @@
 ## This is the denominator substrate. Phases are derived from it.
 ## ---------------------------------------------------------------
 options(width=220)
-D   <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
-DER <- "C:/GIT/CattleMax_Explorer/data/derived"
-dir.create(DER, showWarnings=FALSE, recursive=TRUE)
-rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
-d10 <- function(x) as.Date(substr(x,1,10))
-D8  <- function(n) as.Date(rep(NA_real_,n), origin="1970-01-01")
-## tapply(min/max, na.rm=TRUE) returns +/-Inf when every date in a group is NA.
-## Left unguarded that reached arrow as int32 underflow and was written into
-## animals.parquet as the year -5877641 (181 rows, silently, with no flag).
-## De-Inf inside the helpers so no caller can forget.
-.deinf <- function(v){ v[!is.finite(v)] <- NA_real_; as.Date(v, origin="1970-01-01") }
-mn  <- function(df,idc,dtc,ids){ v<-suppressWarnings(tapply(as.integer(d10(df[[dtc]])), df[[idc]], min, na.rm=TRUE))
-                                 .deinf(as.numeric(v[ids])) }
-mxd <- function(df,idc,dtc,ids){ v<-suppressWarnings(tapply(as.integer(d10(df[[dtc]])), df[[idc]], max, na.rm=TRUE))
-                                 .deinf(as.numeric(v[ids])) }
-PULL <- as.Date("2026-07-29")
+if (!exists("cfg")) {                       # allow a caller to pass its own cfg
+  source(file.path(cm_R <- "R", "config.R")); source(file.path(cm_R, "common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+rd   <- function(f) cm_read(cfg, f)
+D8   <- function(n) as.Date(rep(NA_real_, n), origin="1970-01-01")
+mn   <- function(df, idc, dtc, ids) cm_min_date(df, idc, dtc, ids)
+mxd  <- function(df, idc, dtc, ids) cm_max_date(df, idc, dtc, ids)
+PULL <- cfg$pull_date
+SILVER <- cfg$silver
 
 aAll<-rd("animals.csv"); st<-rd("sale_tickets.csv"); mv<-rd("movements.csv")
 ms<-rd("measurements.csv"); tx<-rd("treatments.csv"); nt<-rd("animal_notes.csv")
@@ -55,8 +50,8 @@ M$first_movement_date <- mn(mv,"animal_id","movement_date",id)
 ## ---- WEANING, by documented precedence ----
 ## Named constants, not buried literals, so they are configurable when this
 ## moves to Python. NEITHER IS VALIDATED BY NORA YET - see PLAN.md §8.
-WEAN_FALLBACK_DAYS  <- 205   # conventional 205-day weaning age
-WEAN_ASSUME_AGE_MO  <- 8     # older than this with no record => assume weaned
+WEAN_FALLBACK_DAYS  <- cfg$wean_fallback_days
+WEAN_ASSUME_AGE_MO  <- cfg$wean_assume_age_mo
 mw   <- ms[grepl("^wean", ms$category, ignore.case=TRUE), ]
 mwd  <- mn(mw,"animal_id","measure_date",id)
 hasw <- function(x) !is.na(x)
@@ -147,7 +142,7 @@ M$phase_now <- phase_at(PULL)
 ## ---- WHY they left ------------------------------------------------------
 ## reason_for_sale (Sold) and cause_of_death (Dead) are free text; the raw
 ## value is kept verbatim and a grouped category added alongside it.
-source("C:/GIT/CattleMax_Explorer/R/exit_reason_map.R")
+source(file.path(cfg$root,"R","exit_reason_map.R"))
 M$exit_reason <- ifelse(M$status %in% "Sold", a$reason_for_sale,
                  ifelse(M$status %in% "Dead", a$cause_of_death, NA))
 M$exit_reason_source <- ifelse(M$status %in% "Sold" & !is.na(a$reason_for_sale), "reason_for_sale",
@@ -191,21 +186,14 @@ M$flag_weaning_after_exit <- !is.na(M$weaning_date) & !is.na(M$exit_date) &
 M$flag_left_undated <- M$status %in% c("Sold","Dead") &
                        is.na(M$sale_date) & is.na(M$death_date) & is.na(M$sale_ticket_date)
 
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
-source("C:/GIT/CattleMax_Explorer/R/exclusions.R"); excl_reset()
+source(file.path(cfg$root,"R","exclusions.R")); excl_reset()
 excl_add("animals.parquet", "status == Reference",
          sum(aAll$status %in% "Reference"), n_animals = sum(aAll$status %in% "Reference"),
          detail="pedigree back-fill, never present on the operation; still used as calving events and sires",
          recoverable=FALSE)
-excl_write(SILVER)
-f  <- file.path(SILVER,"animals.csv")
-fp <- file.path(SILVER,"animals.parquet")
-write.csv(M, f, row.names=FALSE, na="")
-arrow::write_parquet(M, fp, compression="snappy")
-cat("WROTE", fp, sprintf("(%.0f KB)", file.size(fp)/1024), "\n")
-cat("WROTE", f,  sprintf("(%.0f KB)", file.size(f)/1024), "\n")
-cat(" rows:", nrow(M), " cols:", ncol(M), "\n\n")
+excl_write(cfg$silver)
+cm_write_silver(M, cfg, "animals")
+cat("\n")
 
 cat("=== columns ===\n"); print(names(M))
 cat("\n=== phase now (pull date", format(PULL), ") ===\n"); print(table(M$phase_now, useNA="ifany"))

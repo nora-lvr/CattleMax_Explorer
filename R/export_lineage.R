@@ -1,11 +1,14 @@
 ## Emit live counts for the data-flow document, so the diagram can never
 ## drift from what the pipeline actually did. Run after the three builds.
 options(width=200)
-D      <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-OUT    <- "C:/GIT/CattleMax_Explorer/data/derived"
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+OUT <- cfg$derived
 dir.create(OUT, showWarnings=FALSE, recursive=TRUE)
-rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
+rd  <- function(f) cm_read(cfg, f)
 d10 <- function(x) as.Date(substr(x,1,10))
 q   <- function(x) paste0('"', gsub('"','\\\\"', ifelse(is.na(x),"",as.character(x))), '"')
 j   <- function(x) paste0("[", paste(x, collapse=","), "]")
@@ -16,9 +19,9 @@ p   <- function(k, v) paste0(q(k), ":", v)
 kv  <- function(...) paste0("{", paste(c(...), collapse=","), "}")
 num <- function(x) { x <- suppressWarnings(as.numeric(x)); ifelse(is.na(x), 0, x) }
 
-A  <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
-CS <- as.data.frame(arrow::read_parquet(file.path(SILVER,"cows.parquet")))
-TX <- as.data.frame(arrow::read_parquet(file.path(SILVER,"treatments.parquet")))
+A  <- cm_read_silver(cfg, "animals")
+CS <- cm_read_silver(cfg, "cows")
+TX <- cm_read_silver(cfg, "treatments")
 a  <- rd("animals.csv"); br <- rd("breedings.csv"); tx <- rd("treatments.csv")
 
 ## ---- stage counts ----

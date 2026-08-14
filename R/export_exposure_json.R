@@ -1,9 +1,13 @@
 ## Calves per exposed female, computed from the cow-season table.
 options(width=210)
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-OUT <- "C:/Users/lives/AppData/Local/Temp/claude/C--GIT-CattleMax-Explorer/2076ae99-6a88-45b1-927a-6cdd341f08b4/scratchpad"
-CS <- as.data.frame(arrow::read_parquet(file.path(SILVER,"cows.parquet")))
-PULL <- as.Date("2026-07-29"); GEST <- 283
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+OUT <- cfg$derived
+CS <- cm_read_silver(cfg, "cows")
+PULL <- cfg$pull_date; GEST <- cfg$gestation_days
 
 ## Cohort labels, the due date and lost/retained are all computed once in
 ## build_cows.R and READ here. This script only aggregates - it must never

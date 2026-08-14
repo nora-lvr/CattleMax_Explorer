@@ -10,17 +10,19 @@
 ## excluded from cows.parquet purely for not being female).
 ## ---------------------------------------------------------------
 options(width=220)
-D      <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
-d10 <- function(x) as.Date(substr(x,1,10))
-num <- function(x) suppressWarnings(as.numeric(x))
-source("C:/GIT/CattleMax_Explorer/R/exclusions.R"); excl_reset()
-PULL <- as.Date("2026-07-29")
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+rd     <- function(f) cm_read(cfg, f)
+SILVER <- cfg$silver
+PULL   <- cfg$pull_date
+source(file.path(cfg$root,"R","exclusions.R")); excl_reset()
 
-M   <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
+M   <- cm_read_silver(cfg, "animals")
 aAll<- rd("animals.csv"); br <- rd("breedings.csv"); bse <- rd("breeding_soundness_exams.csv")
-ms  <- rd("measurements.csv"); st <- rd("sale_tickets.csv")
+ms  <- rd("measurements.csv")
 br$bdate <- d10(br$breeding_date); bse$edate <- d10(bse$exam_date)
 
 B <- M[M$sex %in% "Bull", ]
@@ -75,20 +77,18 @@ B$last_weight_date <- d10(aAll$last_weight_date[match(id, aAll$id)])
 mw <- ms[ms$animal_id %in% id, ]
 B$n_weights <- as.integer(table(factor(mw$animal_id, levels=id)))
 
-## ---- SALE OUTCOME -----------------------------------------------------
-B$sale_price     <- num(aAll$sale_price[match(id, aAll$id)])
-B$sale_weight    <- num(aAll$sale_weight[match(id, aAll$id)])
-B$reason_for_sale<- aAll$reason_for_sale[match(id, aAll$id)]
-tick <- setNames(st$marketing_method, st$id)
-B$marketing_method <- unname(tick[aAll$sale_ticket_id[match(id, aAll$id)]])
-B$price_per_cwt <- ifelse(!is.na(B$sale_price) & !is.na(B$sale_weight) & B$sale_weight>0,
-                          round(100*B$sale_price/B$sale_weight, 2), NA_real_)
+## ---- DISPOSAL ----------------------------------------------------------
+## SCOPE (Nora, 2026-08-14): this is a VETERINARY tool. Animals and health
+## only - no prices, no economics. Sale WEIGHT is kept because it is a growth
+## measurement; sale price, marketing method and $/cwt are deliberately absent.
+B$sale_weight     <- num(aAll$sale_weight[match(id, aAll$id)])
+B$reason_for_sale <- aAll$reason_for_sale[match(id, aAll$id)]
 
 ## ---- ROLE: is he a herd sire or product? ------------------------------
 ## Destiny, not age (PLAN.md 6): a bull who was never exposed is inventory.
 B$bull_role <- ifelse(B$ever_used_as_sire, "Herd sire",
-               ifelse(!is.na(B$exit_date) & !is.na(B$sale_price), "Sold as product",
-               ifelse(!is.na(B$exit_date), "Left, not sold as product", "Growing inventory")))
+               ifelse(B$status %in% "Sold", "Sold",
+               ifelse(!is.na(B$exit_date), "Died or left", "Growing inventory")))
 B$age_now_mo  <- round(as.numeric(pmin(PULL, ifelse(is.na(B$exit_date), PULL, B$exit_date),
                                         na.rm=TRUE) - B$birth_date)/30.44, 1)
 
@@ -97,15 +97,11 @@ B$flag_no_bse          <- B$n_bse == 0
 B$flag_failed_bse      <- B$ever_failed_bse
 B$flag_used_despite_fail <- B$ever_failed_bse & B$ever_used_as_sire
 B$flag_no_birth_date   <- is.na(B$birth_date)
-B$flag_sold_no_price   <- !is.na(B$exit_date) & is.na(B$sale_price) & B$status %in% "Sold"
 B$flag_no_weights      <- B$n_weights == 0
 
 B <- B[order(B$birth_date, B$animal_id), ]
-fp <- file.path(SILVER,"bulls.parquet"); fc <- file.path(SILVER,"bulls.csv")
-arrow::write_parquet(B, fp, compression="snappy")
-write.csv(B, fc, row.names=FALSE, na="")
-cat("WROTE", fp, sprintf("(%.0f KB)", file.size(fp)/1024), "\n")
-cat(" bulls:", nrow(B), " cols:", ncol(B), "\n\n")
+cm_write_silver(B, cfg, "bulls")
+cat("\n")
 
 cat("=== ROLE ===\n");            print(sort(table(B$bull_role), decreasing=TRUE))
 cat("\n=== BREEDING SOUNDNESS (latest exam) ===\n")
@@ -119,14 +115,12 @@ cat("age at first use (months):\n"); print(round(summary(B$age_at_first_use_mo[B
 cat("services by the top sires:\n")
 print(head(sort(B$n_services_as_sire[B$ever_used_as_sire], decreasing=TRUE), 8))
 cat("progeny recorded:\n"); print(summary(B$n_progeny[B$n_progeny>0]))
-cat("\n=== SALE OUTCOME ===\n")
-cat("sold with a price:", sum(!is.na(B$sale_price)), "\n")
-print(summary(B$sale_price[!is.na(B$sale_price)]))
-cat("price per cwt:\n"); print(summary(B$price_per_cwt[!is.na(B$price_per_cwt)]))
+cat("\n=== DISPOSAL (veterinary scope: no prices, no economics) ===\n")
+print(head(sort(table(B$reason_for_sale, useNA="no"), decreasing=TRUE), 8))
 cat("\n=== FLAGS ===\n"); print(sapply(B[,grep("^flag_",names(B))], sum, na.rm=TRUE))
 
 excl_add("bulls.parquet", "animal is not sex == Bull",
          sum(!(M$sex %in% "Bull")), n_animals=sum(!(M$sex %in% "Bull")),
          detail="females are in cows.parquet; 91 steers and 24 with no sex have no table",
          recoverable=TRUE)
-excl_write(SILVER)
+excl_write(cfg$silver)

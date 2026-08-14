@@ -5,14 +5,17 @@
 ## The final season is left OPEN (still running) or closed by her exit.
 ## ---------------------------------------------------------------
 options(width=220)
-D      <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
-rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
-d10 <- function(x) as.Date(substr(x,1,10))
-PULL <- as.Date("2026-07-29")
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+rd     <- function(f) cm_read(cfg, f)
+SILVER <- cfg$silver
+PULL   <- cfg$pull_date
+GEST   <- cfg$gestation_days
 
-M   <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
+M   <- cm_read_silver(cfg, "animals")
 aAll<- rd("animals.csv"); br <- rd("breedings.csv"); pc <- rd("pregnancy_checks.csv")
 br$bdate <- d10(br$breeding_date); br <- br[!is.na(br$bdate), ]
 pc$cdate <- d10(pc$check_date)
@@ -68,7 +71,7 @@ print(table(dam_src[nonref_calf], useNA="ifany"))
 cat("ET calves re-attributed away from the dam field:",
     sum(!is.na(recip) & !is.na(aAll$dam_animal_id) & recip != aAll$dam_animal_id), "\n\n")
 
-source("C:/GIT/CattleMax_Explorer/R/exclusions.R"); excl_reset()
+source(file.path(cfg$root,"R","exclusions.R")); excl_reset()
 excl_add("cows.parquet", "calf: dam field names the ET donor, no recipient recoverable",
          sum(nonref_calf & is.na(dam_use) & dam_is_donor),
          detail="dam_animal_id == genetic_dam_animal_id; crediting it would credit the donor",
@@ -99,7 +102,7 @@ cat("calving events by dam source:\n"); print(table(calves$dam_source))
 ##      the original per-calf dates: a 3-calf cluster on 3 consecutive days
 ##      emitted 3 seasons EACH claiming 3 calves. Calf counts ran ~36% high
 ##      (4,420 real records reported as 6,453) and produced 1-day intervals.
-TWIN_WINDOW_DAYS <- 7          # <-- NOT YET VALIDATED BY NORA (see PLAN.md §8)
+TWIN_WINDOW_DAYS <- cfg$twin_window_days   # NOT YET VALIDATED - PLAN.md 8
 calves$grp <- NA_integer_
 for (ix in split(seq_len(nrow(calves)), calves$dam)) {
   d <- calves$cbd[ix]; g <- integer(length(d)); k <- 1L; anchor <- d[1]
@@ -151,7 +154,7 @@ for (k in seq_len(nrow(fem))) {
   s1 <- if (!is.null(sv) && nrow(sv)) min(sv$bdate, na.rm=TRUE) else f$entry_date
   s1rule <- if (!is.null(sv) && nrow(sv)) "first_service" else "entry_date"
   ## if she calved before any recorded service, back up to conception
-  if (length(cdates) && !is.na(s1) && cdates[1] < s1) { s1 <- cdates[1]-283; s1rule <- "first_calving-283d" }
+  if (length(cdates) && !is.na(s1) && cdates[1] < s1) { s1 <- cdates[1]-GEST; s1rule <- paste0("first_calving-",GEST,"d") }
 
   starts <- c(s1, cdates)
   ends   <- c(cdates, NA)                      # last season left open
@@ -277,7 +280,7 @@ CS$analysis_ready <- NULL
 ## due = first service + one gestation. If she left before that without a calf
 ## she is LOST: she belongs in the exposed denominator (the herd paid for her)
 ## but not in the retained one (she never had the chance to calve).
-CS$due_date <- CS$first_service + 283
+CS$due_date <- CS$first_service + GEST
 CS$lost_before_calving <- !CS$calved & !is.na(CS$exit_date) & !is.na(CS$due_date) &
                           CS$exit_date < CS$due_date
 CS$retained_to_due <- !CS$lost_before_calving
@@ -323,13 +326,10 @@ excl_add("cows.parquet", "animal: not sex == Heifer",
          recoverable=TRUE)
 excl_add("cows.parquet", "season: zero length (start == end)", n_zero_len,
          detail="carries no information; 2 of them were flagged as calvings", recoverable=FALSE)
-excl_write(SILVER)
+excl_write(cfg$silver)
 
-fp <- file.path(SILVER,"cows.parquet"); fc <- file.path(SILVER,"cows.csv")
-arrow::write_parquet(CS, fp, compression="snappy")
-write.csv(CS, fc, row.names=FALSE, na="")
-cat("\nWROTE", fp, sprintf("(%.0f KB)", file.size(fp)/1024), "\n")
-cat(" cow-seasons:", nrow(CS), " cows:", length(unique(CS$animal_id)), " cols:", ncol(CS), "\n\n")
+cm_write_silver(CS, cfg, "cows")
+cat(" cows:", length(unique(CS$animal_id)), "\n\n")
 
 cat("=== outcome ===\n");       print(table(CS$outcome))
 cat("\n=== parity (0 = season before her first calf) ===\n"); print(table(pmin(CS$parity,8)))

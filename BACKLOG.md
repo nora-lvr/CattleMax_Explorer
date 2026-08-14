@@ -79,7 +79,9 @@ Source: three independent pipeline reviews, 2026-08-14 (accuracy · completeness
       weight, sale weight, bull performance.
 - [ ] **Sire linkage.** `sire_animal_id` (4,018 populated) dropped entirely; 277 of 306 sires are
       Reference-status. Blocks all progeny/sire evaluation — for a seedstock herd.
-- [ ] Calving ease (2,949 codes unread) · money ($10.35M in sale prices unused).
+- [ ] Calving ease (2,949 codes unread).
+- ~~Money / sale prices~~ — **OUT OF SCOPE** (Nora, 2026-08-14). Veterinary tool: animals and
+  health only. Economics is not this practice's arena. Already stripped from `bulls.parquet`.
 
 ## SET 4 — Remaining decisions (lower urgency than 1A)
 

@@ -32,6 +32,13 @@ It must be a **very efficient** way for Nora to make reports for herself and cli
 
 Word/PPT output is a nice-to-have, explicitly **not** a priority.
 
+### Out of scope: economics (Nora, 2026-08-14)
+**This is a veterinary tool. It is about animals and health.** No sale prices, revenue, cost,
+margin or marketing analysis — that is not this practice's arena. `sale_weight` and
+`reason_for_sale` are **in** scope (a growth measurement and a culling/health reason);
+`sale_price`, `purchase_price`, `marketing_cost`, `income` and `sale_ticket` monetary fields are
+**out**. Do not spend time on them.
+
 ---
 
 ## 2. Users & distribution constraints

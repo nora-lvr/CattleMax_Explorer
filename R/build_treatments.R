@@ -5,15 +5,16 @@
 ## just to answer a basic question.
 ## ---------------------------------------------------------------
 options(width=220)
-D      <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
-rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
-d10 <- function(x) as.Date(substr(x,1,10))
-source("C:/GIT/CattleMax_Explorer/R/treatment_map.R")
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+rd <- function(f) cm_read(cfg, f)
+source(file.path(cfg$root,"R","treatment_map.R"))
 
 tx <- rd("treatments.csv")
-A  <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
+A  <- cm_read_silver(cfg, "animals")
 
 T <- data.frame(
   treatment_id   = tx$id,

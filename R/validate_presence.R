@@ -12,14 +12,16 @@
 ## itemised below.
 ## ---------------------------------------------------------------
 options(width=200)
-D      <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
-d10 <- function(x) as.Date(substr(x,1,10))
-PULL <- as.Date("2026-07-29")
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+rd <- function(f) cm_read(cfg, f)
+PULL <- cfg$pull_date
 
 a  <- rd("animals.csv"); mv <- rd("movements.csv"); st <- rd("sale_tickets.csv")
-A  <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
+A  <- cm_read_silver(cfg, "animals")
 a  <- a[!(a$status %in% "Reference"), ]      # the one status use: see note below
 cat("NOTE: status is used ONLY to drop Reference animals (a settled rule).\n")
 cat("      Presence itself is derived from dates alone.\n\n")

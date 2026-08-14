@@ -1,9 +1,12 @@
 ## Export every raw treatment value + its current classification, for review.
 options(width=200)
-SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
-OUT    <- "C:/GIT/CattleMax_Explorer/data/derived"
-dir.create(OUT, showWarnings=FALSE, recursive=TRUE)
-T <- as.data.frame(arrow::read_parquet(file.path(SILVER,"treatments.parquet")))
+if (!exists("cfg")) {
+  source(file.path("R","config.R")); source(file.path("R","common.R"))
+  cfg <- cm_config()
+}
+cm_announce(cfg)
+OUT <- cfg$derived
+T <- cm_read_silver(cfg, "treatments")
 
 j  <- function(x) paste0("[", paste(x, collapse=","), "]")
 qs <- function(x) paste0('"', gsub('\\\\','\\\\\\\\', gsub('"','\\\\"', ifelse(is.na(x),"",x))), '"')
