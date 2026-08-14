@@ -115,6 +115,9 @@ table.grid th:first-child{text-align:left}
 table.grid td{padding:6px 9px;border-bottom:1px solid var(--rule-2);text-align:right;white-space:nowrap}
 table.grid td:first-child{text-align:left;font-weight:600}
 table.grid tr.incomplete td{color:var(--ink-3);font-style:italic}
+table.grid th.grp2{text-align:center;border-bottom:1px solid var(--rule);
+  font-size:10.5px;letter-spacing:.12em;color:var(--ink-2)}
+.sub2{color:var(--ink-3);font-size:11px;font-weight:400}
 .pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;
   text-transform:uppercase;padding:2px 7px;border:1px solid var(--alert);color:var(--alert)}
 .tick{font-size:11px;fill:var(--axis);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -244,7 +247,9 @@ table.grid tr.incomplete td{color:var(--ink-3);font-style:italic}
   </div>
   <div class="card">
     <h2>Season detail</h2>
-    <p class="cap">Exposed = distinct cow-seasons served in that breeding season.</p>
+    <p class="cap"><b>Exposed</b> = every female served. <b>Lost</b> = left the herd before her
+      due date without calving. <b>Retained</b> = still here and able to calve. The exposed basis
+      carries attrition as a cost; the retained basis isolates how the females you kept performed.</p>
     <table class="grid" id="xtable"></table>
   </div>
   <div class="card">
@@ -487,25 +492,36 @@ function drawExpo(){
   const rows=co.map(c=>`<tr class="${c.incomplete?"incomplete":""}">
     <td>${esc(c.cohort)}${c.incomplete?' <span class="pill">incomplete</span>':""}</td>
     <td style="text-align:left;font-weight:400">${esc(c.bredWindow||"")}</td>
-    <td>${c.exposed}</td><td>${c.services}</td><td>${c.spe.toFixed(2)}</td>
-    <td>${c.calved}</td><td>${c.pctCalved.toFixed(1)}%</td>
-    <td>${c.calves}</td><td><b>${c.cpe.toFixed(3)}</b></td></tr>`).join("");
+    <td>${c.exposed}</td><td>${c.lost} <span class="sub2">${c.pctLost.toFixed(0)}%</span></td>
+    <td>${c.retained}</td><td>${c.calved}</td>
+    <td>${c.pctCalved.toFixed(1)}%</td><td><b>${c.pctCalvedRet.toFixed(1)}%</b></td>
+    <td>${c.calves}</td><td>${c.cpe.toFixed(3)}</td><td><b>${c.cpr.toFixed(3)}</b></td></tr>`).join("");
   document.getElementById("xtable").innerHTML=
-    `<thead><tr><th>Calf crop</th><th style="text-align:left">Bred</th><th>Exposed</th><th>Services</th><th>Serv/head</th>
-     <th>Calved</th><th>% calved</th><th>Calves</th><th>Calves/exposed</th></tr></thead><tbody>${rows}</tbody>`;
+    `<thead><tr><th rowspan="2">Calf crop</th><th rowspan="2" style="text-align:left">Bred</th>
+      <th colspan="3" class="grp2">Females</th><th rowspan="2">Calved</th>
+      <th colspan="2" class="grp2">% calved</th><th rowspan="2">Calves</th>
+      <th colspan="2" class="grp2">Calves per female</th></tr>
+     <tr><th>Exposed</th><th>Lost</th><th>Retained</th>
+      <th>of exposed</th><th>of retained</th><th>exposed</th><th>retained</th></tr></thead>
+     <tbody>${rows}</tbody>`;
   drawMetric();
   document.getElementById("xnote").textContent=
     `Cohorts are named for the calf crop they produce, not the season they were bred: females served in the Nov 2025 to Jan 2026 window calve the following August to October, so they are the Fall 2026 crop. The breeding window that produced each crop is shown beneath it. Exposed counts distinct cow-seasons with a service recorded in that window; a season ends when a calf is born. Twins count twice, and an unrecorded calving counts as a failure to calve.`;}
 
 /* ---- metric trend, driven by the table columns ---- */
 const METRICS=[
-  {k:"cpe",       lab:"Calves per exposed female", dp:3},
-  {k:"pctCalved", lab:"% calved",                  dp:1, suffix:"%"},
-  {k:"exposed",   lab:"Females exposed",           dp:0},
-  {k:"calved",    lab:"Females that calved",       dp:0},
-  {k:"calves",    lab:"Calves born",               dp:0},
-  {k:"services",  lab:"Services",                  dp:0},
-  {k:"spe",       lab:"Services per head",         dp:2}];
+  {k:"cpr",          lab:"Calves per RETAINED female", dp:3},
+  {k:"cpe",          lab:"Calves per EXPOSED female",  dp:3},
+  {k:"pctCalvedRet", lab:"% calved, of retained",      dp:1, suffix:"%"},
+  {k:"pctCalved",    lab:"% calved, of exposed",       dp:1, suffix:"%"},
+  {k:"pctLost",      lab:"% lost before calving",      dp:1, suffix:"%"},
+  {k:"lost",         lab:"Females lost before calving",dp:0},
+  {k:"exposed",      lab:"Females exposed",            dp:0},
+  {k:"retained",     lab:"Females retained to due date",dp:0},
+  {k:"calved",       lab:"Females that calved",        dp:0},
+  {k:"calves",       lab:"Calves born",                dp:0},
+  {k:"services",     lab:"Services",                   dp:0},
+  {k:"spe",          lab:"Services per head",          dp:2}];
 function drawMetric(){
   const W=1240,H=420,M={t:24,r:26,b:78,l:64};
   const m=METRICS[+document.getElementById("metric").value];

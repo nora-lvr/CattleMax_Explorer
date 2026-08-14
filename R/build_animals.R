@@ -125,6 +125,17 @@ phase_at <- function(d){
 }
 M$phase_now <- phase_at(PULL)
 
+## ---- WHY they left ------------------------------------------------------
+## reason_for_sale (Sold) and cause_of_death (Dead) are free text; the raw
+## value is kept verbatim and a grouped category added alongside it.
+source("C:/GIT/CattleMax_Explorer/R/exit_reason_map.R")
+M$exit_reason <- ifelse(M$status %in% "Sold", a$reason_for_sale,
+                 ifelse(M$status %in% "Dead", a$cause_of_death, NA))
+M$exit_reason_source <- ifelse(M$status %in% "Sold" & !is.na(a$reason_for_sale), "reason_for_sale",
+                        ifelse(M$status %in% "Dead" & !is.na(a$cause_of_death), "cause_of_death", NA))
+M$exit_reason_group <- classify_exit_reason(M$exit_reason)
+M$flag_left_no_reason <- M$status %in% c("Sold","Dead") & is.na(M$exit_reason)
+
 ## ---- static group membership (undated in CattleMax; snapshot only) ----
 gg <- rd("groupings.csv"); gr <- rd("groups.csv")
 gg$gname <- gr$name[match(gg$group_id, gr$id)]
@@ -159,6 +170,14 @@ cat("\n=== exit rule ===\n"); print(sort(table(M$exit_rule), decreasing=TRUE))
 cat("\n=== entry rule ===\n"); print(sort(table(M$entry_rule), decreasing=TRUE))
 cat("\n=== data-quality flags ===\n")
 print(sapply(M[,grep("^flag_",names(M))], sum))
+cat("\n=== why they left (grouped) ===\n")
+print(sort(table(M$exit_reason_group, useNA="ifany"), decreasing=TRUE))
+cat("left with NO reason recorded:", sum(M$flag_left_no_reason), "of",
+    sum(M$status %in% c("Sold","Dead")), "\n")
+if (any(M$exit_reason_group %in% "Unclassified", na.rm=TRUE)) {
+  cat("\nUNCLASSIFIED raw reasons - add these to R/exit_reason_map.R:\n")
+  print(sort(table(M$exit_reason[M$exit_reason_group %in% "Unclassified"]), decreasing=TRUE))
+}
 cat("\ninactivated (gone, no sale or death date):", sum(!is.na(M$inactivated_date)), "\n")
 cat("\n=== ACTIVE only: phase counts ===\n")
 print(table(M$phase_now[M$status=="Active"], useNA="ifany"))

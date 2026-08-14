@@ -145,6 +145,10 @@ for (k in seq_len(nrow(fem))) {
       conception_method = if (calved && !is.null(calf)) calf$cmethod else NA_character_,
       gestation_days = if (calved && nrow(s)) as.numeric(en - max(s$bdate)) else NA_real_,
       dam_status  = f$status,
+      ## why she left, carried down so a lost season can say what went wrong
+      exit_date   = f$exit_date,
+      exit_reason = f$exit_reason,
+      exit_reason_group = f$exit_reason_group,
       donor       = !is.na(f$donor_start)     && f$donor_start     <= en,
       recipient   = !is.na(f$recipient_start) && f$recipient_start <= en,
       censored    = outcome == "Open at pull date",
@@ -178,6 +182,32 @@ CS$flag_impossible_age <- CS$calved & !is.na(CS$age_at_calving_yrs) & CS$age_at_
 ## a season is ANALYSIS-READY only if it is closed by a calving and fully inside the record
 CS$analysis_ready <- CS$calved & !CS$flag_left_censored & !CS$flag_right_censored &
                      !CS$flag_implausible_multiple & !CS$flag_impossible_age
+
+## ---- EXPOSED vs RETAINED ------------------------------------------------
+## She was exposed, but did she stay long enough to be able to calve?
+## due = first service + one gestation. If she left before that without a calf
+## she is LOST: she belongs in the exposed denominator (the herd paid for her)
+## but not in the retained one (she never had the chance to calve).
+CS$due_date <- CS$first_service + 283
+CS$lost_before_calving <- !CS$calved & !is.na(CS$exit_date) & !is.na(CS$due_date) &
+                          CS$exit_date < CS$due_date
+CS$retained_to_due <- !CS$lost_before_calving
+
+## ---- BREEDING SEASON and CALF CROP ---------------------------------------
+## Derived once, here, so every consumer groups on the same stored label
+## rather than re-deriving it. A season joins a cohort by when she was first
+## served; the crop is named for when those calves DROP (breeding year + 1),
+## which is how the industry names a calf crop.
+bm <- as.integer(format(CS$first_service,"%m"))
+by <- as.integer(format(CS$first_service,"%Y"))
+CS$breeding_type <- ifelse(is.na(bm), NA,
+                    ifelse(bm>=11 | bm<=1, "Fall",
+                    ifelse(bm>=4 & bm<=7,  "Spring", NA)))
+byear <- ifelse(!is.na(CS$breeding_type) & CS$breeding_type=="Fall" & bm<=1, by-1L, by)
+CS$breeding_season <- ifelse(is.na(CS$breeding_type), NA, paste0(byear, " ", CS$breeding_type))
+CS$crop_type <- CS$breeding_type
+CS$crop_year <- ifelse(is.na(CS$breeding_type), NA_integer_, byear + 1L)
+CS$calf_crop <- ifelse(is.na(CS$breeding_type), NA, paste0(CS$crop_type, " ", CS$crop_year))
 
 fp <- file.path(SILVER,"cows.parquet"); fc <- file.path(SILVER,"cows.csv")
 arrow::write_parquet(CS, fp, compression="snappy")

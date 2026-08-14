@@ -5,33 +5,40 @@ OUT <- "C:/Users/lives/AppData/Local/Temp/claude/C--GIT-CattleMax-Explorer/2076a
 CS <- as.data.frame(arrow::read_parquet(file.path(SILVER,"cows.parquet")))
 PULL <- as.Date("2026-07-29"); GEST <- 283
 
-## a season enters a breeding-season cohort by when she was first served
-E <- CS[!is.na(CS$first_service), ]
-mo <- as.integer(format(E$first_service,"%m")); yr <- as.integer(format(E$first_service,"%Y"))
-typ <- ifelse(mo>=11 | mo<=1, "Fall", ifelse(mo>=4 & mo<=7, "Spring", NA))
-sy  <- ifelse(typ=="Fall" & mo<=1, yr-1, yr)
-E$cohort <- ifelse(is.na(typ), NA, paste0(sy," ",typ))
-E <- E[!is.na(E$cohort), ]
+## Cohort labels, the due date and lost/retained are all computed once in
+## build_cows.R and READ here. This script only aggregates - it must never
+## re-derive a value that the silver table already stores.
+E <- CS[!is.na(CS$calf_crop), ]
+E$cohort <- E$breeding_season
 cat("cow-seasons in a breeding cohort:", nrow(E), "of", nrow(CS), "\n")
 
+## Two denominators, both reported:
+##   EXPOSED  - every female served. Answers "what did the whole breeding
+##              group deliver", and so carries attrition as a cost.
+##   RETAINED - females still on the farm at their due date, i.e. those
+##              actually able to calve. Answers "how did the ones we kept do".
+## The gap between them IS the attrition, and is reported in its own right.
+## lost_before_calving is computed once in build_cows.R and read straight off
+## the cow-season table, so the two denominators can never drift apart.
 agg <- do.call(rbind, lapply(sort(unique(E$cohort)), function(k){
   s <- E[E$cohort==k, ]
+  lost <- sum(s$lost_before_calving); retained <- sum(s$retained_to_due)
   due <- min(s$first_service, na.rm=TRUE) + GEST      # first calves expected
   last_due <- max(s$first_service, na.rm=TRUE) + GEST # last calves expected
-  ## Label cohorts by CALF CROP, not by breeding season: a cow bred in the
-  ## Nov 2025 - Jan 2026 window calves Aug-Oct 2026, which the industry (and
-  ## Nora) calls the Fall 2026 calf crop. Crop year = breeding year + 1.
-  byear <- as.integer(substr(k,1,4)); btype <- sub("^\\d+ ","",k)
-  data.frame(cohort=paste0(btype," ",byear+1),
-    year=byear+1L, type=btype,
+  data.frame(cohort=s$calf_crop[1],          # stored label, not re-derived
+    year=s$crop_year[1], type=s$crop_type[1],
     breeding_season=k,
     bred_from=min(s$first_service, na.rm=TRUE),
     bred_to  =max(s$first_service, na.rm=TRUE),
     exposed=nrow(s),
+    lost=lost, retained=retained,
+    pct_lost=round(100*lost/nrow(s),1),
     calved=sum(s$calved),
     calves=sum(ifelse(is.na(s$n_calves_born),0,s$n_calves_born)),
     cpe=round(sum(ifelse(is.na(s$n_calves_born),0,s$n_calves_born))/nrow(s),3),
+    cpr=round(sum(ifelse(is.na(s$n_calves_born),0,s$n_calves_born))/max(retained,1),3),
     pct_calved=round(100*sum(s$calved)/nrow(s),1),
+    pct_calved_ret=round(100*sum(s$calved)/max(retained,1),1),
     services=sum(s$n_services),
     spe=round(sum(s$n_services)/nrow(s),2),
     first_due=due, last_due=last_due,
@@ -49,8 +56,9 @@ same <- format(agg$bred_from,"%Y") == format(agg$bred_to,"%Y")
 agg$bred_window <- ifelse(same,
   paste0(format(agg$bred_from,"%b"), "-", format(agg$bred_to,"%b %y")),
   paste0(format(agg$bred_from,"%b %y"), "-", format(agg$bred_to,"%b %y")))
-cat("\n=== CALVES PER EXPOSED FEMALE, labelled by CALF CROP ===\n")
-print(agg[,c("cohort","bred_window","exposed","services","spe","calved","pct_calved","calves","cpe","incomplete")], row.names=FALSE)
+cat("\n=== CALVES PER FEMALE, both denominators, by CALF CROP ===\n")
+print(agg[,c("cohort","bred_window","exposed","lost","pct_lost","retained",
+             "calved","pct_calved","pct_calved_ret","cpe","cpr","incomplete")], row.names=FALSE)
 cat("\nincomplete cohorts (calves still due after", format(PULL), "):",
     paste(agg$cohort[agg$incomplete], collapse=", "), "\n")
 
@@ -58,7 +66,9 @@ j <- function(x) paste0("[", paste(x, collapse=","), "]")
 qs<- function(x) paste0('"', gsub('"','\\\\"',x), '"')
 rows <- paste0('{"cohort":',qs(agg$cohort),',"year":',agg$year,',"type":',qs(agg$type),
   ',"bredWindow":',qs(agg$bred_window),',"breedingSeason":',qs(agg$breeding_season),
-  ',"exposed":',agg$exposed,',"calved":',agg$calved,',"calves":',agg$calves,
+  ',"exposed":',agg$exposed,',"lost":',agg$lost,',"retained":',agg$retained,
+  ',"pctLost":',agg$pct_lost,',"cpr":',agg$cpr,',"pctCalvedRet":',agg$pct_calved_ret,
+  ',"calved":',agg$calved,',"calves":',agg$calves,
   ',"cpe":',agg$cpe,',"pctCalved":',agg$pct_calved,',"services":',agg$services,
   ',"spe":',agg$spe,',"incomplete":',tolower(as.character(agg$incomplete)),
   ',"leftCensored":',agg$left_censored,'}')
