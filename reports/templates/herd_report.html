@@ -247,6 +247,18 @@ table.grid tr.incomplete td{color:var(--ink-3);font-style:italic}
     <p class="cap">Exposed = distinct cow-seasons served in that breeding season.</p>
     <table class="grid" id="xtable"></table>
   </div>
+  <div class="card">
+    <h2>Trend</h2>
+    <p class="cap">Pick any column from the table above and follow it across crops.
+      Hollow points are incomplete crops.</p>
+    <div class="zoombar">
+      <label class="val" for="metric">Metric</label>
+      <select id="metric" style="width:auto;min-width:210px"></select>
+      <label class="row" style="font-size:12.5px"><input type="checkbox" id="m-split" checked> Split Spring / Fall</label>
+      <label class="row" style="font-size:12.5px"><input type="checkbox" id="m-inc"> Include incomplete crops</label>
+    </div>
+    <svg id="mchart" viewBox="0 0 1240 420" role="img" aria-label="Metric trend across calf crops"></svg>
+  </div>
   <p class="note" id="xnote"></p>
 </section>
 
@@ -481,8 +493,56 @@ function drawExpo(){
   document.getElementById("xtable").innerHTML=
     `<thead><tr><th>Calf crop</th><th style="text-align:left">Bred</th><th>Exposed</th><th>Services</th><th>Serv/head</th>
      <th>Calved</th><th>% calved</th><th>Calves</th><th>Calves/exposed</th></tr></thead><tbody>${rows}</tbody>`;
+  drawMetric();
   document.getElementById("xnote").textContent=
     `Cohorts are named for the calf crop they produce, not the season they were bred: females served in the Nov 2025 to Jan 2026 window calve the following August to October, so they are the Fall 2026 crop. The breeding window that produced each crop is shown beneath it. Exposed counts distinct cow-seasons with a service recorded in that window; a season ends when a calf is born. Twins count twice, and an unrecorded calving counts as a failure to calve.`;}
+
+/* ---- metric trend, driven by the table columns ---- */
+const METRICS=[
+  {k:"cpe",       lab:"Calves per exposed female", dp:3},
+  {k:"pctCalved", lab:"% calved",                  dp:1, suffix:"%"},
+  {k:"exposed",   lab:"Females exposed",           dp:0},
+  {k:"calved",    lab:"Females that calved",       dp:0},
+  {k:"calves",    lab:"Calves born",               dp:0},
+  {k:"services",  lab:"Services",                  dp:0},
+  {k:"spe",       lab:"Services per head",         dp:2}];
+function drawMetric(){
+  const W=1240,H=420,M={t:24,r:26,b:78,l:64};
+  const m=METRICS[+document.getElementById("metric").value];
+  const split=document.getElementById("m-split").checked;
+  const showInc=document.getElementById("m-inc").checked;
+  const C={ink:cssv("--ink"),ui:cssv("--ui"),soft:cssv("--violin-fill"),
+           alert:cssv("--alert"),axis:cssv("--axis"),grid:cssv("--grid"),lab:cssv("--ink-3")};
+  const co=EXPO.cohorts.filter(c=>showInc||!c.incomplete);
+  if(!co.length){document.getElementById("mchart").innerHTML="";return;}
+  const vals=co.map(c=>+c[m.k]);
+  let hi=Math.max(...vals), lo=Math.min(0,Math.min(...vals));
+  if(hi===lo)hi=lo+1; hi=hi*1.12;
+  const X=i=>M.l+(co.length===1?0.5:(i/(co.length-1)))*(W-M.l-M.r);
+  const Y=v=>H-M.b-((v-lo)/(hi-lo))*(H-M.t-M.b);
+  let o=[];
+  const ticks=4;
+  for(let t=0;t<=ticks;t++){const v=lo+(hi-lo)*t/ticks;
+    o.push(`<line x1="${M.l}" y1="${Y(v)}" x2="${W-M.r}" y2="${Y(v)}" stroke="${C.grid}"/>`);
+    o.push(`<text class="tick" x="${M.l-8}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(m.dp)}</text>`);}
+  const series = split ? [["Spring",C.ui],["Fall",C.ink]] : [[null,C.ink]];
+  series.forEach(([typ,col])=>{
+    const pts=co.map((c,i)=>({c,i})).filter(p=>!typ||p.c.type===typ);
+    if(pts.length>1)
+      o.push(`<polyline points="${pts.map(p=>`${X(p.i).toFixed(1)},${Y(+p.c[m.k]).toFixed(1)}`).join(" ")}" fill="none" stroke="${col}" stroke-width="2"/>`);
+    pts.forEach(p=>{const x=X(p.i),y=Y(+p.c[m.k]);
+      o.push(p.c.incomplete
+        ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${cssv("--panel")}" stroke="${C.alert}" stroke-width="2"/>`
+        : `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${col}"/>`);
+      o.push(`<text class="wlab" x="${x.toFixed(1)}" y="${(y-10).toFixed(1)}" text-anchor="middle">${(+p.c[m.k]).toFixed(m.dp)}${m.suffix||""}</text>`);});
+    if(typ)o.push(`<text class="croplab" x="${X(pts[pts.length-1].i)+10}" y="${Y(+pts[pts.length-1].c[m.k])+4}" fill="${col}">${typ}</text>`);});
+  co.forEach((c,i)=>{
+    o.push(`<text class="wlab" x="${X(i).toFixed(1)}" y="${H-M.b+16}" text-anchor="middle">${esc(c.type)}</text>`);
+    o.push(`<text class="wlab" x="${X(i).toFixed(1)}" y="${H-M.b+28}" text-anchor="middle">${c.year}</text>`);});
+  o.push(`<line x1="${M.l}" y1="${H-M.b}" x2="${W-M.r}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  o.push(`<line x1="${M.l}" y1="${M.t}" x2="${M.l}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  o.push(`<text class="tick" x="${M.l}" y="${M.t-6}">${esc(m.lab)}</text>`);
+  document.getElementById("mchart").innerHTML=o.join("");}
 
 /* ---- tabs ---- */
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener("click",()=>{
@@ -492,6 +552,10 @@ document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener("clic
   if(b.id==="tab-expo")drawExpo(); else draw();}));
 
 /* ---- wire up ---- */
+const ms_=document.getElementById("metric");
+METRICS.forEach((m,i)=>ms_.add(new Option(m.lab,i)));
+["metric","m-split","m-inc"].forEach(id=>
+  document.getElementById(id).addEventListener("input",drawMetric));
 const fs=document.getElementById("filt");
 FILTERS.forEach((f,i)=>fs.add(new Option(`${f.label}  (${f.n})`,i)));
 const y0s=document.getElementById("y0"),y1s=document.getElementById("y1");
