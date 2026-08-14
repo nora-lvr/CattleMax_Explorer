@@ -181,7 +181,62 @@ for (k in names(sort(table(th2$cat), decreasing = TRUE))) {
     jp("parts",   jarr(parts)))
 }
 
+## ---- HEADLINE KPIs, trended by year --------------------------------------
+## Chosen with Nora: the two diseases that kill (BRD, enteric) reported as
+## case fatality, and the two that dominate volume (BRD, pinkeye) reported as
+## incidence. Year of case onset, so the trend is readable at a glance.
+KY <- seq(cfg$report_from_year, as.integer(format(cfg$pull_date, "%Y")))
+## denominator: distinct animals with any time at risk in that year
+at_risk <- vapply(KY, function(y){
+  y1 <- as.Date(paste0(y,"-01-01")); y2 <- as.Date(paste0(y,"-12-31"))
+  length(unique(PR$animal_id[PR$phase_start <= y2 & PR$phase_end >= y1]))
+}, numeric(1))
+C$onset_year <- as.integer(format(C$start_date, "%Y"))
+
+kpi_fatality <- function(dz){
+  vapply(KY, function(y){
+    k <- C[C$disease == dz & C$onset_year == y, ]
+    if (!nrow(k)) return(NA_real_)
+    round(100*mean(k$case_fatal), 1)}, numeric(1))
+}
+kpi_incidence <- function(dz){
+  vapply(seq_along(KY), function(i){
+    y <- KY[i]
+    k <- C[C$disease == dz & C$onset_year == y, ]
+    if (!at_risk[i]) return(NA_real_)
+    round(100*length(unique(k$animal_id))/at_risk[i], 1)}, numeric(1))
+}
+kpi_n <- function(dz, fatal=FALSE){
+  vapply(KY, function(y){
+    k <- C[C$disease == dz & C$onset_year == y, ]
+    if (fatal) sum(k$case_fatal) else nrow(k)}, numeric(1))
+}
+mkkpi <- function(label, dz, kind, unit){
+  s <- if (kind == "fatality") kpi_fatality(dz) else kpi_incidence(dz)
+  n <- kpi_n(dz, fatal = kind == "fatality")
+  ## "current" is the latest year with data; the pull year is partial and said so
+  ok <- which(!is.na(s))
+  cur <- if (length(ok)) s[max(ok)] else NA_real_
+  prev<- if (length(ok) > 1) s[ok[length(ok)-1]] else NA_real_
+  jobj(jp("label", jq(label)), jp("disease", jq(dz)), jp("kind", jq(kind)),
+       jp("unit", jq(unit)),
+       jp("current", ifelse(is.na(cur), "null", cur)),
+       jp("previous", ifelse(is.na(prev), "null", prev)),
+       jp("currentYear", KY[max(ok)]),
+       jp("partial", tolower(as.character(KY[max(ok)] == max(KY)))),
+       jp("series", jarr(ifelse(is.na(s), "null", s))),
+       jp("counts", jarr(n)),
+       jp("denom",  jarr(at_risk)))
+}
+kpis <- c(
+  mkkpi("BRD case fatality",      "Respiratory (BRD)", "fatality",  "%"),
+  mkkpi("Enteric case fatality",  "Enteric",           "fatality",  "%"),
+  mkkpi("BRD incidence",          "Respiratory (BRD)", "incidence", "%"),
+  mkkpi("Pinkeye incidence",      "Ocular (pinkeye)",  "incidence", "%"))
+
 json <- jobj(
+  jp("kpis",  jarr(kpis)),
+  jp("kpiYears", jarr(KY)),
   jp("composition", jarr(unlist(comp))),
   jp("compYears", jarr(YRS)),
   jp("trend",   jarr(unlist(trend))),
