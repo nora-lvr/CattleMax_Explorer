@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Herd Data Lineage</title>
+<style>
+:root{
+  --alert:#944947; --alert-soft:#f4eae9; --ui:#3a3634; --ui-2:#6b6663;
+  --paper:#f6f3f1; --panel:#fffdfc; --ink:#1d1d1d; --ink-2:#5a5350; --ink-3:#8b8280;
+  --rule:#e2dad7; --rule-2:#efe9e7; --ok:#4a6b45; --raw:#cfc9c6; --silver:#8f8885;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --alert:#c98a87; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
+  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
+  --rule:#332c2c; --rule-2:#282222; --ok:#8fb387; --raw:#3d3634; --silver:#6b6360;}}
+:root[data-theme="dark"]{
+  --alert:#c98a87; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
+  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
+  --rule:#332c2c; --rule-2:#282222; --ok:#8fb387; --raw:#3d3634; --silver:#6b6360;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding:0 26px 70px}
+.cond{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed}
+header{border-bottom:2px solid var(--alert);padding:26px 0 16px}
+h1{margin:0 0 7px;font-size:clamp(23px,3vw,33px);font-weight:640;letter-spacing:-.02em}
+.sub{margin:0;color:var(--ink-2);font-size:15px;max-width:74ch}
+.stamp{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px 18px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-3)}
+.stamp b{color:var(--ink-2)}
+h2{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;text-transform:uppercase;
+  letter-spacing:.1em;font-size:15px;font-weight:700;margin:38px 0 4px;padding-bottom:6px;
+  border-bottom:1px solid var(--rule)}
+.lede{color:var(--ink-2);font-size:14px;margin:8px 0 18px;max-width:78ch}
+figure{margin:0 0 10px}
+svg.flow{display:block;width:100%;height:auto;background:var(--panel);border:1px solid var(--rule)}
+.dec{border:1px solid var(--rule);background:var(--panel);margin-bottom:14px}
+.dec>summary{cursor:pointer;padding:12px 15px;display:grid;
+  grid-template-columns:34px 1fr auto;gap:12px;align-items:start;list-style:none}
+.dec>summary::-webkit-details-marker{display:none}
+.dec[open]>summary{border-bottom:1px solid var(--rule-2)}
+.num{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;
+  color:var(--panel);background:var(--ui);width:26px;height:26px;display:grid;place-items:center;border-radius:2px}
+.rule{font-weight:620;font-size:14.5px}
+.where{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-3);
+  display:block;margin-top:2px;letter-spacing:.02em}
+.tag{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;
+  border:1px solid currentColor;white-space:nowrap;align-self:center}
+.tag.yes{color:var(--ok)} .tag.no{color:var(--alert)} .tag.partly{color:var(--ink-3)}
+.body{padding:2px 15px 15px 60px}
+.body p{margin:8px 0 12px;color:var(--ink-2);font-size:14px;max-width:76ch}
+.counts{display:flex;flex-wrap:wrap;gap:1px;background:var(--rule)}
+.cnt{background:var(--panel);padding:8px 12px;min-width:132px;flex:1}
+.cnt .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.cnt .v{font-size:19px;font-weight:640;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:6px}
+th{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;text-transform:uppercase;
+  letter-spacing:.08em;font-size:11px;color:var(--ink-3);text-align:left;padding:7px 9px;
+  border-bottom:1.5px solid var(--rule)}
+td{padding:5px 9px;border-bottom:1px solid var(--rule-2)}
+td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+td.f{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+.warn{border-left:3px solid var(--alert);background:var(--alert-soft);padding:11px 14px;font-size:13.5px;
+  color:var(--ink-2);margin:16px 0}
+.note{font-size:12.5px;color:var(--ink-3);max-width:80ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>How a CattleMax export becomes the silver tables</h1>
+  <p class="sub">Every transformation between the raw export and the three tables all reporting reads
+  from, with the rule applied, why it exists, and how many records it touched on this pull. Counts are
+  generated from the pipeline itself, so this page cannot drift from what the code did.</p>
+  <div class="stamp">
+    <span>herd <b id="s-herd"></b></span><span>pull <b id="s-pull"></b></span>
+    <span>pulled <b id="s-date"></b></span><span>record horizon <b id="s-hz"></b></span>
+    <span>page generated <b id="s-gen"></b></span>
+  </div>
+</header>
+
+<h2>The flow</h2>
+<p class="lede">Grey is what CattleMax gave us. Dark is what we build. Every arrow carries a rule,
+numbered to the decision that governs it.</p>
+<figure><svg class="flow" id="flow" viewBox="0 0 1140 560" role="img"
+  aria-label="Data flow from the CattleMax export to the three silver tables"></svg></figure>
+
+<h2>Decisions, in the order they are applied</h2>
+<p class="lede">Every rule below changes what the numbers mean. Those marked
+<span class="tag no" style="border:none;padding:0">not validated</span> are still my judgement, not yours.</p>
+<div id="decisions"></div>
+
+<h2>What gets flagged rather than fixed</h2>
+<p class="lede">The pipeline never silently drops a questionable record. It marks it, counts it, and
+leaves the decision visible. These are the flags carried on this pull.</p>
+<table id="flags"></table>
+
+<div class="warn" id="openq"></div>
+</div>
+
+<script>
+const L = /*__DATA__*/;
+const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+document.getElementById("s-herd").textContent=L.herd;
+document.getElementById("s-pull").textContent=L.pull;
+document.getElementById("s-date").textContent=L.pulled;
+document.getElementById("s-hz").textContent=L.horizon;
+document.getElementById("s-gen").textContent=L.generated;
+
+/* ---------- flow diagram ---------- */
+function flow(){
+  const W=1140,H=560, C={raw:cssv("--raw"),silver:cssv("--ui"),ink:cssv("--ink"),
+    panel:cssv("--panel"),line:cssv("--ui-2"),lab:cssv("--ink-3"),alert:cssv("--alert")};
+  const S=Object.fromEntries(L.stages.map(s=>[s.id,s]));
+  const box=(x,y,w,h,fill,txt,sub,dark)=>`
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${fill}" stroke="${C.line}"/>
+    <text x="${x+14}" y="${y+25}" font-size="14.5" font-weight="700" fill="${dark?C.panel:C.ink}"
+      font-family="ui-monospace,Menlo,Consolas,monospace">${esc(txt)}</text>
+    <text x="${x+14}" y="${y+45}" font-size="12.5" fill="${dark?C.panel:C.ink}" opacity=".85">${esc(sub)}</text>`;
+  const arrow=(x1,y1,x2,y2,label,n)=>{
+    const mx=(x1+x2)/2;
+    return `<path d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2-9} ${y2}" fill="none"
+      stroke="${C.line}" stroke-width="1.6" marker-end="url(#a)"/>
+      ${label?`<text x="${mx}" y="${(y1+y2)/2-7}" font-size="11" fill="${C.lab}" text-anchor="middle"
+        font-family="ui-monospace,Menlo,Consolas,monospace">${esc(label)}</text>`:""}
+      ${n?`<circle cx="${mx}" cy="${(y1+y2)/2+9}" r="9" fill="${C.silver}"/>
+        <text x="${mx}" y="${(y1+y2)/2+13}" font-size="11" font-weight="700" fill="${C.panel}"
+        text-anchor="middle">${n}</text>`:""}`;
+  };
+  let o=`<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+    orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${C.line}"/></marker></defs>`;
+  o+=`<text x="30" y="30" font-size="11" font-weight="700" letter-spacing="1.5"
+     fill="${C.lab}">RAW EXPORT</text>`;
+  o+=`<text x="700" y="30" font-size="11" font-weight="700" letter-spacing="1.5"
+     fill="${C.lab}">SILVER TABLES &mdash; ALL REPORTING READS THESE</text>`;
+
+  o+=box(30,52,250,62,C.raw,"animals.csv",S.raw.n.toLocaleString()+" rows",false);
+  o+=box(30,140,250,62,C.raw,"movements · measurements","treatments · notes · breedings",false);
+  o+=box(30,228,250,62,C.raw,"sale_tickets · embryos","flushes · preg_checks",false);
+  o+=box(30,316,250,62,C.raw,"groupings · groups","categories",false);
+  o+=box(30,404,250,62,C.raw,"treatments.csv",TXROWS.toLocaleString()+" rows",false);
+
+  o+=box(700,120,400,74,C.silver,"animals.parquet",
+    S.animals.n.toLocaleString()+" animals · "+S.animals.note,true);
+  o+=box(700,250,400,74,C.silver,"cows.parquet",
+    S.cows.n.toLocaleString()+" cow-seasons · "+S.cows.note,true);
+  o+=box(700,380,400,74,C.silver,"treatments.parquet",
+    S.treatments.n.toLocaleString()+" events · "+S.treatments.note,true);
+
+  o+=box(390,140,230,62,C.panel,"exclude Reference",
+    S.nonref.n.toLocaleString()+" remain",false);
+  o+=arrow(280,83,390,160,"","1");
+  o+=arrow(280,171,390,171,"","");
+  o+=arrow(620,171,700,157,"entry · exit · weaning · phase","");
+  o+=arrow(280,259,700,190,"","3");
+  o+=arrow(280,347,700,194,"group + category labels","");
+
+  o+=arrow(1100,157,1100,287,"","")
+    .replace('C 1100 157, 1100 287','C 1160 157, 1160 287');
+  o+=`<path d="M1100 194 C 1130 210, 1130 260, 1102 287" fill="none" stroke="${C.line}"
+      stroke-width="1.6" marker-end="url(#a)"/>
+      <text x="1136" y="245" font-size="10.5" fill="${C.lab}" text-anchor="middle">reads</text>`;
+  o+=arrow(280,435,700,417,"","11");
+  o+=`<path d="M1100 194 C 1128 250, 1128 360, 1102 417" fill="none" stroke="${C.line}"
+      stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#a)"/>`;
+
+  o+=`<text x="700" y="500" font-size="12" fill="${C.lab}">Numbered circles are the decisions below.</text>`;
+  o+=`<text x="700" y="520" font-size="12" fill="${C.alert}">Nothing downstream may re-derive a value these tables already store.</text>`;
+  document.getElementById("flow").innerHTML=o;
+}
+const TXROWS = L.stages.find(s=>s.id==="treatments").n;
+
+/* ---------- decisions ---------- */
+const TAGTXT={yes:"validated",no:"not validated",partly:"partly validated"};
+document.getElementById("decisions").innerHTML = L.decisions.map((d,i)=>`
+  <details class="dec"${d.validated!=="yes"?" open":""}>
+    <summary>
+      <span class="num">${i+1}</span>
+      <span><span class="rule">${esc(d.rule)}</span>
+        <span class="where">${esc(d.stage)}</span></span>
+      <span class="tag ${esc(d.validated)}">${TAGTXT[d.validated]||""}</span>
+    </summary>
+    <div class="body">
+      <p>${esc(d.detail)}</p>
+      <div class="counts">${d.counts.map(c=>
+        `<div class="cnt"><div class="k">${esc(c.k)}</div><div class="v">${esc(c.v)}</div></div>`).join("")}</div>
+    </div>
+  </details>`).join("");
+
+/* ---------- flags ---------- */
+const fl=L.flags.slice().sort((a,b)=>b.n-a.n);
+document.getElementById("flags").innerHTML=
+  "<thead><tr><th>Flag</th><th>Table</th><th style='text-align:right'>Records</th></tr></thead><tbody>"+
+  fl.map(f=>`<tr><td class="f">${esc(f.flag)}</td><td>${esc(f.table)}</td>
+    <td class="n">${f.n.toLocaleString()}</td></tr>`).join("")+"</tbody>";
+
+const notval=L.decisions.filter(d=>d.validated!=="yes");
+document.getElementById("openq").innerHTML=
+  `<b>${notval.length} decision${notval.length===1?"":"s"} still need your sign-off.</b> `+
+  notval.map(d=>esc(d.rule.split(":")[0])).join("; ")+
+  ". Until they are settled these are my judgement, and every number derived through them inherits it.";
+flow();
+matchMedia("(prefers-color-scheme:dark)").addEventListener("change",flow);
+</script>
+</body>
+</html>
