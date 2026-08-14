@@ -10,7 +10,22 @@ PULL <- as.Date("2026-07-29"); GEST <- 283
 ## re-derive a value that the silver table already stores.
 E <- CS[!is.na(CS$calf_crop), ]
 E$cohort <- E$breeding_season
-cat("cow-seasons in a breeding cohort:", nrow(E), "of", nrow(CS), "\n")
+## Name what is excluded rather than dropping it silently (PLAN.md 5.4).
+exposed_all <- sum(!is.na(CS$first_service))
+unmapped    <- CS[!is.na(CS$first_service) & is.na(CS$calf_crop), ]
+cat("=== cohort coverage ===\n")
+cat("cow-seasons total                    :", nrow(CS), "\n")
+cat("  never served (no breeding record)  :", nrow(CS)-exposed_all, "\n")
+cat("  served AND assigned to a calf crop :", nrow(E), "\n")
+cat("  served but UNMAPPED month          :", nrow(unmapped),
+    sprintf(" (%.1f%% of served)\n", 100*nrow(unmapped)/max(exposed_all,1)))
+if (nrow(unmapped)) {
+  cat("    their first-service months:", paste(names(table(format(unmapped$first_service,"%b"))),
+      table(format(unmapped$first_service,"%b")), sep="=", collapse=", "), "\n")
+  cat("    of which calved:", sum(unmapped$calved), " calves:",
+      sum(unmapped$n_calves_born, na.rm=TRUE), "\n")
+}
+cat("\n")
 
 ## Two denominators, both reported:
 ##   EXPOSED  - every female served. Answers "what did the whole breeding
@@ -75,6 +90,8 @@ rows <- paste0('{"cohort":',qs(agg$cohort),',"year":',agg$year,',"type":',qs(agg
 json <- paste0('{"cohorts":[',paste(rows,collapse=","),']',
   ',"pull":"2026-07-29","gestation":',GEST,
   ',"totalSeasons":',nrow(CS),',"analysisReady":',sum(CS$analysis_ready),
+  ',"unmappedSeasons":',nrow(unmapped),',"unmappedCalved":',sum(unmapped$calved),
+  ',"neverServed":',nrow(CS)-exposed_all,
   ',"horizon":"',format(CS$record_horizon[1]),'"',
   ',"medianInterval":',round(median(CS$calving_interval_days[CS$analysis_ready & !is.na(CS$calving_interval_days)],na.rm=TRUE)),
   ',"flags":{',paste(sprintf('%s:%d', qs(sub("^flag_","",grep("^flag_",names(CS),value=TRUE))),

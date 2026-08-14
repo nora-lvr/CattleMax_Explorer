@@ -44,14 +44,31 @@ cat("RECORD HORIZON used:", format(HORIZON), "\n\n")
 ## with a calving - precisely the trap this comment block exists to prevent.
 ## A calf with no dam_animal_id has no known carrier and must be dropped from
 ## the cow-season table rather than attributed to the wrong female.
+## APPROVED BY NORA 2026-08-14: attribute ET calves to the RECIPIENT.
+## Three routes, in order:
+##   1. breeding_id -> breedings.animal_id = the female actually SERVED. This
+##      is the recipient for an ET, and it is the only route that can correct
+##      a dam field pointing at the donor (73 ET calves disagree with it).
+##   2. dam_animal_id, UNLESS it equals genetic_dam - that means the dam field
+##      is naming the donor, not the carrier (104 ET calves).
+##   3. otherwise no known carrier: DROP and flag. Never credit a donor.
 realdam <- aAll$real_dam_animal_id
 gdam    <- aAll$genetic_dam_animal_id
-dam_use <- aAll$dam_animal_id
-dam_src <- ifelse(!is.na(dam_use), "dam_animal_id(carrier)", NA_character_)
-n_no_carrier <- sum(is.na(aAll$dam_animal_id) & !is.na(realdam) &
-                    !is.na(d10(aAll$birth_date)))
-cat("calf records with NO carrier dam (dropped, not attributed to real_dam):",
-    n_no_carrier, "\n")
+recip   <- br$animal_id[match(aAll$breeding_id, br$id)]
+dam_is_donor <- !is.na(aAll$dam_animal_id) & !is.na(gdam) & aAll$dam_animal_id == gdam
+
+dam_use <- rep(NA_character_, nrow(aAll)); dam_src <- rep(NA_character_, nrow(aAll))
+i <- !is.na(recip);                      dam_use[i] <- recip[i];                 dam_src[i] <- "breeding_id(recipient)"
+i <- is.na(dam_use) & !is.na(aAll$dam_animal_id) & !dam_is_donor
+dam_use[i] <- aAll$dam_animal_id[i];     dam_src[i] <- "dam_animal_id(carrier)"
+
+nonref_calf <- !(aAll$status %in% "Reference") & !is.na(d10(aAll$birth_date))
+cat("=== calf -> carrier attribution ===\n")
+print(table(dam_src[nonref_calf], useNA="ifany"))
+cat("dropped, dam field names the DONOR    :", sum(nonref_calf & is.na(dam_use) & dam_is_donor), "\n")
+cat("dropped, no dam link at all           :", sum(nonref_calf & is.na(dam_use) & !dam_is_donor), "\n")
+cat("ET calves re-attributed away from the dam field:",
+    sum(!is.na(recip) & !is.na(aAll$dam_animal_id) & recip != aAll$dam_animal_id), "\n\n")
 calves <- data.frame(calf_id = aAll$id,
                      dam     = dam_use,
                      dam_source = dam_src,
@@ -238,12 +255,24 @@ CS$retained_to_due <- !CS$lost_before_calving
 ## rather than re-deriving it. A season joins a cohort by when she was first
 ## served; the crop is named for when those calves DROP (breeding year + 1),
 ## which is how the industry names a calf crop.
+## Windows set from the CALVING distribution, not assumed (Nora's rule:
+## roll a month into the block it is contiguous with; split it out only if
+## the calving pattern is genuinely separated).
+## The calving year has exactly two contiguous blocks:
+##     Spring calving  1 Jan - 22 Apr   (1,136 calvings)
+##     Fall calving    30 Jul - 25 Nov  (1,501 calvings)
+## with real gaps late Apr - late Jul and late Nov - Dec.
+## March-bred females calve 9 Jan (median) - inside the Spring block and
+## contiguous with April-bred (7 Feb), so MARCH IS SPRING, not a third season.
+## The single February season calves 24 Oct, inside the Fall block.
+## Aug/Sep/Oct remain unmapped (3 seasons) and are SURFACED, never dropped.
 bm <- as.integer(format(CS$first_service,"%m"))
 by <- as.integer(format(CS$first_service,"%Y"))
 CS$breeding_type <- ifelse(is.na(bm), NA,
-                    ifelse(bm>=11 | bm<=1, "Fall",
-                    ifelse(bm>=4 & bm<=7,  "Spring", NA)))
-byear <- ifelse(!is.na(CS$breeding_type) & CS$breeding_type=="Fall" & bm<=1, by-1L, by)
+                    ifelse(bm>=11 | bm<=2, "Fall",
+                    ifelse(bm>=3  & bm<=7, "Spring", NA)))
+## a Fall season running Nov..Feb is labelled by the year it STARTED
+byear <- ifelse(!is.na(CS$breeding_type) & CS$breeding_type=="Fall" & bm<=2, by-1L, by)
 CS$breeding_season <- ifelse(is.na(CS$breeding_type), NA, paste0(byear, " ", CS$breeding_type))
 CS$crop_type <- CS$breeding_type
 CS$crop_year <- ifelse(is.na(CS$breeding_type), NA_integer_, byear + 1L)
