@@ -80,6 +80,20 @@ P$phase_clock <- ifelse(P$phase == "Calf", "days since birth",
                  ifelse(P$phase == "Growing", "days since weaning",
                  ifelse(P$phase == "Cow", "days since first calving", "days since first sire use")))
 
+## ---- COHORT: the group she entered the phase WITH -----------------------
+## Animals move through a phase together, so a trend must compare groups that
+## entered together rather than slicing a calendar year across two calvings.
+## The calving year has two blocks (Spring 1 Jan - 22 Apr, Fall 30 Jul -
+## 25 Nov), so a phase entry in Jan-Jun is a Spring group and Jul-Dec a Fall
+## group. For Calf that is her birth crop; for Growing her weaning group; for
+## Cow the season she first calved; for Breeding when he first went to work.
+.mo <- as.integer(format(P$phase_start, "%m"))
+.yr <- as.integer(format(P$phase_start, "%Y"))
+P$cohort_season <- ifelse(.mo <= 6, "Spring", "Fall")
+P$cohort_year   <- .yr
+P$cohort        <- paste(P$cohort_season, P$cohort_year)
+P$cohort_sort   <- .yr * 10 + ifelse(.mo <= 6, 1, 2)   # orders Spring before Fall
+
 P$flag_no_birth_date <- is.na(P$birth_date)
 P$flag_censored      <- !P$completed
 P$flag_zero_length   <- P$days_at_risk <= 1
