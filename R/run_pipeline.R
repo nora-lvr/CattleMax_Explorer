@@ -25,7 +25,9 @@ steps <- c(
   "build_bulls.R",       # one row per bull
   "build_treatments.R",  # one row per treatment event
   "build_locations.R",   # one row per animal-location interval (the group half)
+  "build_phase_risk.R",  # one row per animal-phase: the producer-facing denominator
   "build_disease.R",     # one row per disease case, with its outcome
+  "export_disease_review.R", # the editable disease grouping sheet
   "export_lineage.R"     # the data-flow document's live counts
 )
 
