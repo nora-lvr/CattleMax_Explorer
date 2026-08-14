@@ -14,12 +14,16 @@
 ## ---------------------------------------------------------------
 
 ## ---- what the product IS ----
+## ORDER MATTERS - first match wins, so brand names must be listed BEFORE any
+## generic route word. "Banamine Transdermal Pour-On" is flunixin, an
+## anti-inflammatory; if a bare "pour-on" pattern is tested first it steals
+## 176 events into Antiparasitic and inverts their intent.
 DRUG_CLASS_RULES <- list(
-  list(cls="Vaccine",            pat="bovi-shield|alpha 7|covexin|nasalgen|bar-vac|vaccine|bacterin|baterine|bovoculi|moraxl|vista|pyramid|triangle|express|virashield|somnu"),
-  list(cls="Antiparasitic",      pat="permectrin|pour-?on|synanthic|oxfendazole|safe-?guard|fenbendazole|ivermectin|dectomax|cydectin|convert|eprinex|clean[ -]?up"),
-  list(cls="Insecticide",        pat="insect control|fly|tag"),
-  list(cls="Antibiotic",         pat="excede|baytr|biomycin|terramycin|liquamycin|advocin|combi-?pen|penicillin|draxxin|tulathro|florfenicol|nuflor|resflor|zactran|zuprevo|micotil|oxytetracycl|tetracycline|sulfamethazine|albon|naxcel|polyflex|noromycin"),
   list(cls="Anti-inflammatory",  pat="banamine|flunixin|dexameth|predef|isoflupredone|meloxicam|prevail|aspirin|bute"),
+  list(cls="Antibiotic",         pat="excede|baytr|biomycin|terramycin|liquamycin|advocin|combi-?pen|penicillin|draxxin|tulathro|florfenicol|nuflor|resflor|zactran|zuprevo|micotil|oxytetracycl|tetracycline|sulfamethazine|albon|naxcel|polyflex|noromycin"),
+  list(cls="Vaccine",            pat="bovi-shield|alpha 7|covexin|nasalgen|bar-vac|vaccine|bacterin|baterine|bovoculi|moraxl|vista|pyramid|triangle|express|virashield|somnu"),
+  list(cls="Antiparasitic",      pat="permectrin|synanthic|oxfendazole|safe-?guard|fenbendazole|ivermectin|dectomax|cydectin|convert|eprinex|clean[ -]?up|pour-?on insectic"),
+  list(cls="Insecticide",        pat="insect control|\\bfly\\b|pour-?on"),
   list(cls="Repro hormone",      pat="lutalyse|cystorelin|estrumate|factrel|gonabreed|cidr|prostagland|oxytocin"),
   list(cls="Supportive care",    pat="electrolyte|re-?sorb|bluelite|probios|fluids|milk replacer|bolus|vit |vitamin|multimin|b complex|b 12|k1|a d e|corid|amprol|microbial"),
   list(cls="Not a product",      pat="^dead$|took the vet|^n/?a$")
