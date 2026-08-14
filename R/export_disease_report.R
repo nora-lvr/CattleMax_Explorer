@@ -10,6 +10,34 @@ PR <- cm_read_silver(cfg, "phase_risk")
 A  <- cm_read_silver(cfg, "animals")
 EX <- tryCatch(cm_read_silver(cfg, "exclusions"), error=function(e) NULL)
 
+## ---- COHORT GRANULARITY --------------------------------------------------
+##   season  Spring and Fall groups kept apart. Truest to how the herd is
+##           managed, but halves n per point and can read as sporadic.
+##   year    the two calvings pooled into one annual cohort. Roughly doubles
+##           n per point and smooths the line, at the cost of blending two
+##           groups that are managed separately.
+##
+##   Rscript R/export_disease_report.R            # season (default)
+##   Rscript R/export_disease_report.R year       # pooled annual cohorts
+.a <- commandArgs(trailingOnly = TRUE)
+COHORT_MODE <- {
+  if (exists("COHORT_MODE")) COHORT_MODE
+  else if (any(.a == "year")) "year"
+  else "season"
+}
+stopifnot(COHORT_MODE %in% c("season","year"))
+if (COHORT_MODE == "year") {
+  PR$cohort      <- as.character(PR$cohort_year)
+  PR$cohort_sort <- PR$cohort_year
+  SUFFIX <- "_annual"
+  STEPBACK <- 1                      # one unit of cohort_sort = one year
+} else {
+  SUFFIX <- ""
+  STEPBACK <- 10                     # cohort_sort is year*10 + season
+}
+cat("cohort granularity:", COHORT_MODE,
+    if (COHORT_MODE=="year") " (Spring and Fall pooled)" else " (Spring and Fall separate)", "\n\n")
+
 PHASES <- c("Calf","Growing","Cow","Breeding")
 emit <- function(l) jobj(paste(mapply(function(k,v)
   jp(k, if (is.numeric(v) || is.logical(v)) ifelse(is.na(v),"null",tolower(as.character(v))) else jq(v)),
@@ -34,9 +62,12 @@ for (ph in PHASES) {
       cases=nrow(k), fatal=sum(k$case_fatal),
       cfr=round(100*mean(k$case_fatal),1),
       relapsed=sum(k$outcome=="Relapsed"),
-      medDay=round(median(k$day_of_phase, na.rm=TRUE)),
-      q1Day=round(quantile(k$day_of_phase,.25,na.rm=TRUE)),
-      q3Day=round(quantile(k$day_of_phase,.75,na.rm=TRUE)),
+      ## timing uses day_of_phase_clean: NA for animals bought after the
+      ## anchoring event, whose clock runs from purchase and is not comparable
+      medDay=round(median(k$day_of_phase_clean, na.rm=TRUE)),
+      q1Day=round(quantile(k$day_of_phase_clean,.25,na.rm=TRUE)),
+      q3Day=round(quantile(k$day_of_phase_clean,.75,na.rm=TRUE)),
+      timedCases=sum(!is.na(k$day_of_phase_clean)),
       per100=round(100*nrow(k)*med/tot,2),
       medianDays=round(med)))
   }
@@ -51,6 +82,8 @@ phs <- lapply(PHASES, function(ph){
             medianDays=round(median(pr$days_at_risk)),
             animalDays=sum(pr$days_at_risk),
             clock=pr$phase_clock[1],
+            clockTrue=sum(pr$clock_true), clockOnPurchase=sum(!pr$clock_true),
+            timedCases=sum(!is.na(cs$day_of_phase_clean)),
             cases=nrow(cs), affected=length(unique(cs$animal_id)),
             anyDisease=round(100*length(unique(cs$animal_id))/nrow(pr),1),
             fatal=sum(cs$case_fatal)))
@@ -61,13 +94,15 @@ phs <- Filter(Negate(is.null), phs)
 BIN <- 14
 hist <- list()
 for (ph in PHASES) {
-  cs <- C[C$phase_at_onset %in% ph & !is.na(C$day_of_phase), ]
+  ## only true-anchor cases: a purchased animal's day 40 is 40 days after we
+  ## bought her, not 40 days after birth/weaning, so it cannot share this axis
+  cs <- C[C$phase_at_onset %in% ph & !is.na(C$day_of_phase_clean), ]
   if (!nrow(cs)) next
   top <- names(head(sort(table(cs$disease), decreasing=TRUE), 5))
-  hi  <- min(max(cs$day_of_phase, na.rm=TRUE), 730)
+  hi  <- min(max(cs$day_of_phase_clean, na.rm=TRUE), 730)
   brk <- seq(0, hi + BIN, by = BIN)
   for (dz in top) {
-    v <- cs$day_of_phase[cs$disease == dz]; v <- v[v <= hi]
+    v <- cs$day_of_phase_clean[cs$disease == dz]; v <- v[v <= hi]
     if (!length(v)) next
     cnt <- as.integer(table(cut(v, brk, right=FALSE)))
     hist[[length(hist)+1]] <- jobj(jp("phase",jq(ph)), jp("disease",jq(dz)),
@@ -106,10 +141,18 @@ for (ph in PHASES) {
     if (nrow(grp) < 15) next                     # too thin to trend, named below
     ids <- grp$animal_id
     k   <- cs[cs$animal_id %in% ids, ]
-    open <- sum(!grp$completed)
+    ## STILL IN FLIGHT is not the same as "did not complete the phase". A
+    ## grower that was SOLD never completes Growing, but her figure is final -
+    ## she can never be treated again. Only an animal still in the phase at the
+    ## pull date can still add cases, so that is what makes a point provisional.
+    ## Using !completed made 60-80% of every historic Growing cohort look open.
+    open  <- sum(!grp$completed)
+    still <- sum(grp$ended_by == "still in phase at pull")
     trend[[length(trend)+1]] <- emit(list(
       phase = ph, cohort = grp$cohort[1], sort = o,
       animals = nrow(grp), openInPhase = open,
+      stillIn = still, pctStillIn = round(100*still/nrow(grp), 0),
+      leftMidPhase = sum(grp$ended_by == "left the herd"),
       pctOpen = round(100*open/nrow(grp), 0),
       medianDays = round(median(grp$days_at_risk)),
       anyDisease = round(100*length(unique(k$animal_id))/nrow(grp), 1),
@@ -119,10 +162,10 @@ for (ph in PHASES) {
       kk <- k[k$disease == dz, ]
       trend[[length(trend)+1]] <- emit(list(
         phase = ph, cohort = grp$cohort[1], sort = o, disease = dz,
-        animals = nrow(grp), openInPhase = open,
+        animals = nrow(grp), openInPhase = open, stillIn = still,
         attack = round(100*length(unique(kk$animal_id))/nrow(grp), 1),
         cases = nrow(kk), fatal = sum(kk$case_fatal),
-        medDay = if (nrow(kk)) round(median(kk$day_of_phase, na.rm=TRUE)) else NA_real_))
+        medDay = if (nrow(kk)) round(median(kk$day_of_phase_clean, na.rm=TRUE)) else NA_real_))
     }
   }
   ## the MOST RECENT cohort with a usable number of animals
@@ -139,7 +182,7 @@ for (ph in PHASES) {
       cases = nrow(k), fatal = sum(k$case_fatal),
       topDisease = if (length(dz)) names(dz)[1] else "none recorded",
       topAttack = if (length(dz)) round(100*length(unique(k$animal_id[k$disease==names(dz)[1]]))/nrow(grp),1) else 0,
-      topMedDay = if (length(dz)) round(median(k$day_of_phase[k$disease==names(dz)[1]], na.rm=TRUE)) else NA_real_))
+      topMedDay = if (length(dz)) round(median(k$day_of_phase_clean[k$disease==names(dz)[1]], na.rm=TRUE)) else NA_real_))
   }
 }
 
@@ -262,23 +305,33 @@ first_case <- first_case[!duplicated(paste(first_case$animal_id, first_case$dise
                                            first_case$phase_at_onset)), ]
 cum_curve <- function(ids, dz, days_at_risk, maxday, step) {
   fc <- first_case[first_case$animal_id %in% ids & first_case$disease == dz &
-                   !is.na(first_case$day_of_phase), ]
+                   !is.na(first_case$day_of_phase_clean), ]
   grid <- seq(0, maxday, by = step)
   vapply(grid, function(d) {
     atrisk <- sum(days_at_risk >= d)
     if (!atrisk) return(NA_real_)
-    round(100 * sum(fc$day_of_phase <= d) / atrisk, 2)
+    round(100 * sum(fc$day_of_phase_clean <= d) / atrisk, 2)
   }, numeric(1))
 }
 watch <- list()
+watch_excluded <- list()
 for (ph in PHASES) {
   pr <- PR[PR$phase == ph, ]; if (!nrow(pr)) next
-  cs <- C[C$phase_at_onset %in% ph, ]; if (!nrow(cs)) next
+  ## A day-of-phase curve can only hold animals whose clock is on its true
+  ## anchor. Dropping their CASES but keeping them in the denominator would
+  ## deflate the rate, so they leave BOTH sides together - and are counted here.
+  keep <- pr$clock_true & !pr$flag_pre_horizon_birth
+  if (sum(!keep)) watch_excluded[[length(watch_excluded)+1]] <- emit(list(
+    phase = ph, dropped = sum(!keep), of = nrow(pr),
+    onPurchase = sum(!pr$clock_true),
+    preHorizon = sum(pr$flag_pre_horizon_birth & pr$clock_true)))
+  pr <- pr[keep, ]; if (nrow(pr) < 15) next
+  cs <- C[C$phase_at_onset %in% ph & C$animal_id %in% pr$animal_id, ]; if (!nrow(cs)) next
   ords <- sort(unique(pr$cohort_sort[pr$cohort_year >= cfg$report_from_year]))
   ords <- ords[vapply(ords, function(o) sum(pr$cohort_sort == o) >= 15, logical(1))]
   if (length(ords) < 2) next
   cur_o  <- max(ords)
-  base_o <- ords[ords < cur_o & ords >= cur_o - BASE_YEARS*10]
+  base_o <- ords[ords < cur_o & ords >= cur_o - BASE_YEARS*STEPBACK]
   if (!length(base_o)) next
   curg  <- pr[pr$cohort_sort == cur_o, ]
   baseg <- pr[pr$cohort_sort %in% base_o, ]
@@ -319,7 +372,9 @@ for (ph in PHASES) {
 
 json <- jobj(
   jp("watch", jarr(unlist(watch))),
+  jp("watchExcluded", jarr(unlist(watch_excluded))),
   jp("baseYears", BASE_YEARS),
+  jp("cohortMode", jq(COHORT_MODE)),
   jp("kpis",  jarr(kpis)),
   jp("kpiYears", jarr(KY)),
   jp("composition", jarr(unlist(comp))),
@@ -346,6 +401,6 @@ json <- jobj(
   jp("brand", jq(cfg$brand)), jp("brandDeep", jq(cfg$brand_deep)),
   jp("firstCase", jq(format(min(C$start_date)))),
   jp("lastCase",  jq(format(max(C$start_date)))))
-cm_write_json(json, file.path(cfg$derived, "disease_report.json"),
+cm_write_json(json, file.path(cfg$derived, paste0("disease_report", SUFFIX, ".json")),
               expect=list(incidence=length(inc), phases=length(phs)))
 cat("incidence rows:", length(inc), " phases:", length(phs), " hist series:", length(hist), "\n")

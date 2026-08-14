@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disease Trend Across Cohorts</title>
+<!--__STYLE__-->
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brandline">
+    <p class="wordmark">LVR</p>
+    <span class="doctype">Cohort Trend</span>
+    <span class="herdname" id="s-herd"></span>
+  </div>
+  <h1>Disease trend across cohorts</h1>
+  <p class="sub">One question only: is each disease getting better or worse, group by group,
+  since <span id="s-from"></span>. Nothing else from the herd health report is repeated here.</p>
+  <div class="stamp">
+    <span>pull <b id="s-pull"></b></span><span>pulled <b id="s-date"></b></span>
+    <span>cases <b id="s-first"></b> to <b id="s-last"></b></span>
+    <span>episode gap <b id="s-gap"></b> days</span>
+    <span>death window <b id="s-dw"></b> days</span>
+  </div>
+</header>
+
+<h2>Trend across cohorts</h2>
+<p class="lede">Each point is a group that entered the phase together. <b>Spring and Fall are
+separate lines and the axis is the year</b>, so a season that runs worse every year shows as a
+standing gap rather than a saw-tooth. <b>One panel per disease, each on its own scale</b> &mdash;
+the patterns differ far more than the levels do. Hollow points are groups with 10% or more of the animals still in the phase at the pull
+date, so those figures can still rise.</p>
+<p class="note" id="trend-note"></p>
+<div id="trend"></div>
+
+<p class="note">The value plotted is the <b>attack rate</b>: the share of animals entering that
+phase in that group treated at least once for that disease. It counts every animal that entered,
+including those still in the phase or that left part way through, so it is a floor.
+A <b>case</b> is a run of therapeutic treatments on one animal for one disease &mdash; treatments
+closer together than the episode gap are the same case. Treatments with no diagnosis recorded are
+reported as <b>Unknown disease</b> rather than dropped, so they still count against every rate.
+Every record excluded anywhere in the pipeline is listed in the exclusions ledger that ships beside
+the data.</p>
+</div>
+
+<script>
+const D = /*__DATA__*/;
+const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const PH=["Calf","Growing","Cow","Breeding"];
+document.getElementById("s-herd").textContent=D.herd;
+document.getElementById("s-pull").textContent=D.pull;
+document.getElementById("s-date").textContent=D.pulled;
+document.getElementById("s-gap").textContent=D.caseGap;
+document.getElementById("s-dw").textContent=D.deathWindow;
+document.getElementById("s-first").textContent=D.firstCase;
+document.getElementById("s-last").textContent=D.lastCase;
+document.getElementById("s-from").textContent=D.fromYear;
+
+document.getElementById("trend-note").textContent=
+  `Trends start at ${D.fromYear}. ${D.cohortsBefore.toLocaleString()} animal-phases began before `+
+  `that and are excluded here — they sit in the ragged start of the CattleMax record, where `+
+  `treatments were not yet being captured, so including them would show a false improvement.`;
+
+/* ---- trend across cohorts, FACETED BY DISEASE with free y axes ----
+   Kept byte-identical to the block in disease_report.html so the two reports
+   can never disagree about the same number. Change one, change both. */
+const TW=520,TH=190,TM={t:20,r:14,b:46,l:46};
+document.getElementById("trend").innerHTML=PH.map(p=>{
+  const all=D.trend.filter(t=>t.phase===p);
+  const cohorts=[...new Set(all.map(t=>t.sort))].sort((a,b)=>a-b);
+  if(cohorts.length<2)return"";
+  /* the x axis is the YEAR; Spring and Fall are two separate lines, so a
+     season with a persistently worse rate shows as a gap between the lines
+     rather than as a saw-tooth on one line */
+  const yr=s=>Math.floor(s/10), sea=s=>(s%10===1?"Spring":"Fall");
+  const years=[...new Set(cohorts.map(yr))].sort((a,b)=>a-b);
+  if(years.length<2)return"";
+  const lbl={}; all.forEach(t=>{lbl[t.sort]=t.cohort;});
+  const nAn={}; all.filter(t=>t.disease==null).forEach(t=>{nAn[t.sort]=t.animals;});
+  const dzs=[...new Set(all.filter(t=>t.disease!=null).map(t=>t.disease))];
+  const C={alert:cssv("--alert"),grid:cssv("--grid"),axis:cssv("--axis"),
+           panel:cssv("--panel"),lab:cssv("--ink-3"),ink:cssv("--ink")};
+  const SER=[{name:"Spring",code:1,col:C.alert,dash:""},
+             {name:"Fall",  code:2,col:C.ink,  dash:"5 3"}];
+  const X=y=>TM.l+(years.indexOf(y)/(years.length-1||1))*(TW-TM.l-TM.r);
+  /* each disease gets its OWN y scale: a 2% disease and a 20% one cannot
+     share an axis without the small one flattening to nothing */
+  const facets=dzs.map(dz=>{
+    const series=SER.map(s=>({...s,pts:cohorts.filter(c=>c%10===s.code).map(c=>{
+      const r=all.find(t=>t.sort===c&&t.disease===dz);
+      /* hollow = the point can still MOVE: at least a tenth of the group was
+         still in the phase at the pull date. A sold animal never completes the
+         phase but her figure is final, so !completed is the wrong test. */
+      return r?{x:yr(c),y:r.attack,open:r.stillIn>=r.animals*0.1,n:r.animals,
+                cases:r.cases,fatal:r.fatal,day:r.medDay}:null;}).filter(Boolean)}))
+      .filter(s=>s.pts.length);
+    const flat=series.flatMap(s=>s.pts);
+    if(!flat.length||flat.every(q=>q.y===0))return"";
+    const mx=Math.max(...flat.map(q=>q.y),1)*1.25;
+    const Y=v=>TH-TM.b-(v/mx)*(TH-TM.t-TM.b);
+    let o="";
+    [0,mx/2,mx].forEach(v=>{o+=`<line x1="${TM.l}" y1="${Y(v)}" x2="${TW-TM.r}" y2="${Y(v)}" stroke="${C.grid}"/>
+      <text class="tick" x="${TM.l-6}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(mx<5?1:0)}%</text>`;});
+    series.forEach(s=>{
+      o+=`<polyline points="${s.pts.map(q=>`${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(" ")}"
+        fill="none" stroke="${s.col}" stroke-width="2"${s.dash?` stroke-dasharray="${s.dash}"`:""}/>`;
+      s.pts.forEach(q=>{o+=q.open
+        ? `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4.5" fill="${C.panel}" stroke="${s.col}" stroke-width="2"/>`
+        : `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4" fill="${s.col}"/>`;});
+      /* label the last point of each season so the two are readable apart */
+      const q=s.pts[s.pts.length-1];
+      o+=`<text class="tick" x="${X(q.x)-5}" y="${Y(q.y)-8}" text-anchor="end"
+        fill="${s.col}">${q.y.toFixed(1)}%</text>`;});
+    years.forEach((y,i)=>{ if(years.length>8 && i%2) return;
+      o+=`<text class="tick" x="${X(y).toFixed(1)}" y="${TH-TM.b+15}" text-anchor="middle">${y}</text>`;});
+    o+=`<line x1="${TM.l}" y1="${TH-TM.b}" x2="${TW-TM.r}" y2="${TH-TM.b}" stroke="${C.axis}"/>`;
+    const tot=flat.reduce((a,q)=>a+q.cases,0), ft=flat.reduce((a,q)=>a+q.fatal,0);
+    const days=flat.map(q=>q.day).filter(v=>v!=null);
+    return `<div class="facet"><h4>${esc(dz)}</h4>
+      <p class="fcap">${tot} cases${ft?", "+ft+" died":""}${days.length?" · typically day "+
+        Math.round(days.reduce((a,b)=>a+b,0)/days.length):""}</p>
+      <svg viewBox="0 0 ${TW} ${TH}" role="img" aria-label="${esc(dz)} trend by season">${o}</svg></div>`;
+  }).filter(Boolean).join("");
+  if(!facets)return"";
+  const sIn={}; all.filter(t=>t.disease==null).forEach(t=>{sIn[t.sort]=t.stillIn;});
+  const ns=cohorts.map(c=>`${esc(lbl[c])} n=${nAn[c]||"?"}${sIn[c]?" ("+sIn[c]+" still in phase)":""}`).join(" · ");
+  const key=`<span class="key"><svg width="26" height="10" aria-hidden="true">
+      <line x1="1" y1="5" x2="25" y2="5" stroke="var(--alert)" stroke-width="2"/>
+      <circle cx="13" cy="5" r="3.5" fill="var(--alert)"/></svg> Spring</span>
+    <span class="key"><svg width="26" height="10" aria-hidden="true">
+      <line x1="1" y1="5" x2="25" y2="5" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 3"/>
+      <circle cx="13" cy="5" r="3.5" fill="var(--ink)"/></svg> Fall</span>`;
+  return `<div class="card"><h3>${esc(p)}</h3>
+    <p class="cap">% of each entry cohort treated for that disease at least once, by year.
+    <b>Spring and Fall are separate lines</b> &mdash; a season that runs worse every year is a
+    management finding, and averaging the two would hide it.
+    <b>Each panel has its own scale</b> so a small disease is not flattened by a large one.
+    Hollow points are groups with 10% or more still in the phase at the pull date, so those figures can still rise; solid points are settled.</p>
+    <p class="cap">${key}</p>
+    <p class="cap" style="color:var(--ink-3)">cohort sizes &mdash; ${ns}</p>
+    <div class="facets">${facets}</div></div>`;
+}).join("");
+</script>
+</body>
+</html>

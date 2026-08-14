@@ -94,6 +94,35 @@ P$cohort_year   <- .yr
 P$cohort        <- paste(P$cohort_season, P$cohort_year)
 P$cohort_sort   <- .yr * 10 + ifelse(.mo <= 6, 1, 2)   # orders Spring before Fall
 
+## ---- IS THE CLOCK ON ITS TRUE ANCHOR? -----------------------------------
+## The phase clock is only "days since birth" / "days since weaning" when the
+## animal was here for that event. A female bought at 3 years old has no
+## recorded weaning we were present for, so her Growing clock starts at
+## PURCHASE. Reports must say so rather than claim a weaning-based day.
+.A <- A[match(P$animal_id, A$animal_id), ]
+P$clock_true <- rep(TRUE, nrow(P))
+## Calf: true only when the phase starts at birth
+i <- P$phase == "Calf"
+P$clock_true[i] <- !is.na(.A$birth_date[i]) & P$phase_start[i] == .A$birth_date[i]
+## Growing: true only when it starts on the recorded weaning date
+i <- P$phase == "Growing"
+P$clock_true[i] <- !is.na(.A$weaning_date[i]) & P$phase_start[i] == .A$weaning_date[i]
+## Cow / Breeding anchor on events that must have happened here
+P$clock_anchor <- ifelse(P$clock_true, P$phase_clock, "days since purchase")
+P$days_anchor_late <- ifelse(P$phase == "Growing" & !P$clock_true & !is.na(.A$weaning_date),
+                             as.numeric(P$phase_start - .A$weaning_date),
+                      ifelse(P$phase == "Calf" & !P$clock_true & !is.na(.A$birth_date),
+                             as.numeric(P$phase_start - .A$birth_date), NA_real_))
+
+P$flag_clock_not_true   <- !P$clock_true
+## a phase that begins before the animal was born is impossible: purchase_date
+## precedes birth_date on a handful of records
+P$flag_start_before_birth <- !is.na(P$birth_date) & P$phase_start < P$birth_date
+## born long before CattleMax recording began; their day-of-phase can run to
+## decades and must never be plotted as if it were a current animal
+P$flag_pre_horizon_birth <- !is.na(P$birth_date) &
+                            P$birth_date < as.Date("2015-01-01")
+
 P$flag_no_birth_date <- is.na(P$birth_date)
 P$flag_censored      <- !P$completed
 P$flag_zero_length   <- P$days_at_risk <= 1
@@ -113,6 +142,21 @@ tab <- do.call(rbind, lapply(c("Calf","Growing","Cow","Breeding"), function(ph){
              total_animal_days=sum(s$days_at_risk),
              stringsAsFactors=FALSE)}))
 print(tab, row.names=FALSE)
+cat("\n=== IS THE PHASE CLOCK ON ITS TRUE ANCHOR? ===\n")
+ct <- do.call(rbind, lapply(c("Calf","Growing","Cow","Breeding"), function(ph){
+  s <- P[P$phase == ph, ]; if (!nrow(s)) return(NULL)
+  data.frame(phase=ph, rows=nrow(s), true_anchor=sum(s$clock_true),
+             on_purchase=sum(!s$clock_true),
+             median_days_late=if (any(!s$clock_true & !is.na(s$days_anchor_late)))
+               round(median(s$days_anchor_late[!s$clock_true], na.rm=TRUE)) else NA_real_,
+             stringsAsFactors=FALSE)}))
+print(ct, row.names=FALSE)
+cat("on_purchase = the animal was bought after the anchoring event, so her clock\n")
+cat("starts at purchase. Her day-of-phase is NOT days since birth/weaning and a\n")
+cat("report must not label it as such.\n")
+cat("\nphase starts BEFORE the animal was born:", sum(P$flag_start_before_birth), "\n")
+cat("born before 2015 (pre-recording):", sum(P$flag_pre_horizon_birth), "\n")
+
 cat("\nCENSORED means the phase was cut short by her leaving or by the pull\n")
 cat("date. Those animals were still at risk for the days they were in it, so\n")
 cat("they belong in a days-at-risk denominator but NOT in a completed-phase\n")

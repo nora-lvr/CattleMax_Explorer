@@ -133,6 +133,8 @@ tr.dormant td.rawdx{color:var(--ink-3)}
 .facet{border:1px solid var(--rule-2);padding:8px 10px 4px;background:var(--panel)}
 .facet h4{margin:0 0 1px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
   text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-weight:700;color:var(--ink)}
+.key{display:inline-flex;align-items:center;gap:6px;margin-right:18px;
+  font-size:12px;color:var(--ink-2);letter-spacing:.02em}
 .facet p.fcap{margin:0 0 4px;font-size:11px;color:var(--ink-3);
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .tick{font-size:10.5px;fill:var(--axis);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -160,6 +162,12 @@ tr.dormant td.rawdx{color:var(--ink-3)}
   </div>
 </header>
 
+<!-- SUPPRESSED 2026-08-14 (Nora): the current-group-vs-baseline verdict and watch
+     curves are commented out, not deleted. She does not trust the comparison and
+     there was no time to work it through. The underlying data is still computed
+     and still in the JSON (watch, watchExcluded) - nothing was discarded. To bring
+     it back, uncomment this block AND the matching JS block below.
+
 <div id="verdict"></div>
 <h2>Where the current groups stand right now</h2>
 <p class="lede">Each panel compares the group on the ground today against the same phase in the
@@ -173,13 +181,9 @@ so a part-finished group is never measured against a completed one. The vertical
 into the phase the current group has actually got; nothing is drawn beyond it.
 A <b>case</b> is a run of therapeutic treatments on one animal for one disease &mdash; treatments
 closer together than the episode gap are the same case.</p>
-
-<h2>The groups on the ground now</h2>
-<p class="lede">The most recent cohort to enter each phase &mdash; the calves, growers and cows
-currently moving through. These groups are <b>still in their phase</b>, so their rates are a floor
-and will rise as they age. They are the ones you can still act on.</p>
-<div class="stats" id="cur"></div>
-<p class="note" id="cur-note"></p>
+-->
+<p class="note">A <b>case</b> is a run of therapeutic treatments on one animal for one disease
+&mdash; treatments closer together than the episode gap are the same case.</p>
 
 <h2>Trend across cohorts</h2>
 <p class="lede">Each point is a group that entered the phase together, so a Spring and a Fall calving
@@ -200,6 +204,12 @@ spread evenly through a phase, so a per-day figure understates diseases that str
 <p class="lede">Cases by day of phase &mdash; days since birth for calves, days since weaning for
 growers. This is what makes the timing actionable: two diseases with a similar attack rate can need
 completely different intervention points.</p>
+<p class="note">These timing charts use only animals that were
+<b>here for the event the clock starts on</b>. An animal bought at eighteen months has no weaning we
+witnessed, so her day 40 is forty days after she arrived, not forty days after weaning &mdash; mixing
+the two would smear the curve. Those animals are dropped from <i>both</i> the cases and the animals-at-risk,
+never from one side only, and are counted below. They remain in every attack rate on this page.</p>
+<div class="card"><table id="tbl-clock"></table></div>
 <div id="charts"></div>
 
 <h2>What happened to the animals</h2>
@@ -233,7 +243,13 @@ document.getElementById("s-dw").textContent=D.deathWindow;
 document.getElementById("s-first").textContent=D.firstCase;
 document.getElementById("s-last").textContent=D.lastCase;
 
-/* ---- CURRENT GROUPS vs the previous N years, at the same day of phase ---- */
+/* ---- CURRENT GROUPS vs the previous N years, at the same day of phase ----
+   SUPPRESSED 2026-08-14 (Nora) - see the matching comment in the markup above.
+   Held behind a disabled guard rather than deleted (a block comment would be
+   closed early by the nested comment inside). Set SHOW_WATCH to true, and
+   uncomment the markup block above, to restore it. */
+const SHOW_WATCH=false;
+if(SHOW_WATCH){
 document.getElementById("k-base").textContent=D.baseYears;
 const alarms=D.watch.filter(w=>w.alarm);
 const betters=D.watch.filter(w=>w.better);
@@ -301,19 +317,7 @@ document.getElementById("watch").innerHTML=PH.map(p=>{
       Dashed line is how far this group has got.</p>
     <div class="facets">${facets}</div></div>`;
 }).join("");
-
-/* ---- the groups on the ground now ---- */
-document.getElementById("cur").innerHTML=D.current.map(c=>
-  `<div class="stat${c.anyDisease>=25?" hot":""}">
-     <div class="k">${esc(c.phase)} &middot; ${esc(c.cohort)}</div>
-     <div class="v">${c.anyDisease.toFixed(1)}%</div>
-     <div class="n">${c.animals} animals, ${c.cases} cases<br>
-       top: ${esc(c.topDisease)} ${c.topAttack.toFixed(1)}%${c.topMedDay!=null?" · day "+c.topMedDay:""}</div>
-   </div>`).join("");
-document.getElementById("cur-note").textContent=
-  "Percentage is the share of that group treated for anything at least once so far. "+
-  D.current.map(c=>`${c.cohort} ${c.phase.toLowerCase()}: ${c.openInPhase} of ${c.animals} still in phase, median ${c.medianDays} days in so far`).join("; ")+
-  ". Because they have not finished, every figure here can only go up.";
+}  /* ---- end suppressed watch block ---- */
 
 document.getElementById("trend-note").textContent=
   `Trends start at ${D.fromYear}. ${D.cohortsBefore.toLocaleString()} animal-phases began before `+
@@ -326,52 +330,74 @@ document.getElementById("trend").innerHTML=PH.map(p=>{
   const all=D.trend.filter(t=>t.phase===p);
   const cohorts=[...new Set(all.map(t=>t.sort))].sort((a,b)=>a-b);
   if(cohorts.length<2)return"";
+  /* the x axis is the YEAR; Spring and Fall are two separate lines, so a
+     season with a persistently worse rate shows as a gap between the lines
+     rather than as a saw-tooth on one line */
+  const yr=s=>Math.floor(s/10), sea=s=>(s%10===1?"Spring":"Fall");
+  const years=[...new Set(cohorts.map(yr))].sort((a,b)=>a-b);
+  if(years.length<2)return"";
   const lbl={}; all.forEach(t=>{lbl[t.sort]=t.cohort;});
   const nAn={}; all.filter(t=>t.disease==null).forEach(t=>{nAn[t.sort]=t.animals;});
   const dzs=[...new Set(all.filter(t=>t.disease!=null).map(t=>t.disease))];
   const C={alert:cssv("--alert"),grid:cssv("--grid"),axis:cssv("--axis"),
            panel:cssv("--panel"),lab:cssv("--ink-3"),ink:cssv("--ink")};
+  const SER=[{name:"Spring",code:1,col:C.alert,dash:""},
+             {name:"Fall",  code:2,col:C.ink,  dash:"5 3"}];
+  const X=y=>TM.l+(years.indexOf(y)/(years.length-1||1))*(TW-TM.l-TM.r);
   /* each disease gets its OWN y scale: a 2% disease and a 20% one cannot
      share an axis without the small one flattening to nothing */
   const facets=dzs.map(dz=>{
-    const pts=cohorts.map(c=>{
+    const series=SER.map(s=>({...s,pts:cohorts.filter(c=>c%10===s.code).map(c=>{
       const r=all.find(t=>t.sort===c&&t.disease===dz);
-      return r?{x:c,y:r.attack,open:r.openInPhase>r.animals*0.5,n:r.animals,
-                cases:r.cases,fatal:r.fatal,day:r.medDay}:null;}).filter(Boolean);
-    if(!pts.length||pts.every(q=>q.y===0))return"";
-    const mx=Math.max(...pts.map(q=>q.y),1)*1.25;
-    const X=v=>TM.l+(cohorts.indexOf(v)/(cohorts.length-1||1))*(TW-TM.l-TM.r);
+      /* hollow = the point can still MOVE: at least a tenth of the group was
+         still in the phase at the pull date. A sold animal never completes the
+         phase but her figure is final, so !completed is the wrong test. */
+      return r?{x:yr(c),y:r.attack,open:r.stillIn>=r.animals*0.1,n:r.animals,
+                cases:r.cases,fatal:r.fatal,day:r.medDay}:null;}).filter(Boolean)}))
+      .filter(s=>s.pts.length);
+    const flat=series.flatMap(s=>s.pts);
+    if(!flat.length||flat.every(q=>q.y===0))return"";
+    const mx=Math.max(...flat.map(q=>q.y),1)*1.25;
     const Y=v=>TH-TM.b-(v/mx)*(TH-TM.t-TM.b);
     let o="";
     [0,mx/2,mx].forEach(v=>{o+=`<line x1="${TM.l}" y1="${Y(v)}" x2="${TW-TM.r}" y2="${Y(v)}" stroke="${C.grid}"/>
       <text class="tick" x="${TM.l-6}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(mx<5?1:0)}%</text>`;});
-    o+=`<polyline points="${pts.map(q=>`${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(" ")}"
-      fill="none" stroke="${C.alert}" stroke-width="2"/>`;
-    pts.forEach(q=>{o+=q.open
-      ? `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4.5" fill="${C.panel}" stroke="${C.alert}" stroke-width="2"/>`
-      : `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4" fill="${C.alert}"/>`;});
-    /* label only the first and last point so small facets stay readable */
-    [pts[0],pts[pts.length-1]].forEach((q,i)=>{ if(!q)return;
-      o+=`<text class="tick" x="${X(q.x)+(i?-4:4)}" y="${Y(q.y)-8}" text-anchor="${i?"end":"start"}"
-        fill="${C.ink}">${q.y.toFixed(1)}%</text>`;});
-    cohorts.forEach((c,i)=>{ if(cohorts.length>6 && i%2) return;
-      const t=(lbl[c]||"").split(" ");
-      o+=`<text class="tick" x="${X(c).toFixed(1)}" y="${TH-TM.b+14}" text-anchor="middle">${esc(t[0]||"")}</text>
-          <text class="tick" x="${X(c).toFixed(1)}" y="${TH-TM.b+25}" text-anchor="middle">${esc(t[1]||"")}</text>`;});
+    series.forEach(s=>{
+      o+=`<polyline points="${s.pts.map(q=>`${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(" ")}"
+        fill="none" stroke="${s.col}" stroke-width="2"${s.dash?` stroke-dasharray="${s.dash}"`:""}/>`;
+      s.pts.forEach(q=>{o+=q.open
+        ? `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4.5" fill="${C.panel}" stroke="${s.col}" stroke-width="2"/>`
+        : `<circle cx="${X(q.x).toFixed(1)}" cy="${Y(q.y).toFixed(1)}" r="4" fill="${s.col}"/>`;});
+      /* label the last point of each season so the two are readable apart */
+      const q=s.pts[s.pts.length-1];
+      o+=`<text class="tick" x="${X(q.x)-5}" y="${Y(q.y)-8}" text-anchor="end"
+        fill="${s.col}">${q.y.toFixed(1)}%</text>`;});
+    years.forEach((y,i)=>{ if(years.length>8 && i%2) return;
+      o+=`<text class="tick" x="${X(y).toFixed(1)}" y="${TH-TM.b+15}" text-anchor="middle">${y}</text>`;});
     o+=`<line x1="${TM.l}" y1="${TH-TM.b}" x2="${TW-TM.r}" y2="${TH-TM.b}" stroke="${C.axis}"/>`;
-    const tot=pts.reduce((a,q)=>a+q.cases,0), ft=pts.reduce((a,q)=>a+q.fatal,0);
-    const days=pts.map(q=>q.day).filter(v=>v!=null);
+    const tot=flat.reduce((a,q)=>a+q.cases,0), ft=flat.reduce((a,q)=>a+q.fatal,0);
+    const days=flat.map(q=>q.day).filter(v=>v!=null);
     return `<div class="facet"><h4>${esc(dz)}</h4>
       <p class="fcap">${tot} cases${ft?", "+ft+" died":""}${days.length?" · typically day "+
         Math.round(days.reduce((a,b)=>a+b,0)/days.length):""}</p>
-      <svg viewBox="0 0 ${TW} ${TH}" role="img" aria-label="${esc(dz)} trend">${o}</svg></div>`;
+      <svg viewBox="0 0 ${TW} ${TH}" role="img" aria-label="${esc(dz)} trend by season">${o}</svg></div>`;
   }).filter(Boolean).join("");
   if(!facets)return"";
-  const ns=cohorts.map(c=>`${esc(lbl[c])} n=${nAn[c]||"?"}`).join(" · ");
+  const sIn={}; all.filter(t=>t.disease==null).forEach(t=>{sIn[t.sort]=t.stillIn;});
+  const ns=cohorts.map(c=>`${esc(lbl[c])} n=${nAn[c]||"?"}${sIn[c]?" ("+sIn[c]+" still in phase)":""}`).join(" · ");
+  const key=`<span class="key"><svg width="26" height="10" aria-hidden="true">
+      <line x1="1" y1="5" x2="25" y2="5" stroke="var(--alert)" stroke-width="2"/>
+      <circle cx="13" cy="5" r="3.5" fill="var(--alert)"/></svg> Spring</span>
+    <span class="key"><svg width="26" height="10" aria-hidden="true">
+      <line x1="1" y1="5" x2="25" y2="5" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 3"/>
+      <circle cx="13" cy="5" r="3.5" fill="var(--ink)"/></svg> Fall</span>`;
   return `<div class="card"><h3>${esc(p)}</h3>
-    <p class="cap">% of each entry cohort treated for that disease at least once.
+    <p class="cap">% of each entry cohort treated for that disease at least once, by year.
+    <b>Spring and Fall are separate lines</b> &mdash; a season that runs worse every year is a
+    management finding, and averaging the two would hide it.
     <b>Each panel has its own scale</b> so a small disease is not flattened by a large one.
-    Hollow points are cohorts still in the phase, so those figures will rise.</p>
+    Hollow points are groups with 10% or more still in the phase at the pull date, so those figures can still rise; solid points are settled.</p>
+    <p class="cap">${key}</p>
     <p class="cap" style="color:var(--ink-3)">cohort sizes &mdash; ${ns}</p>
     <div class="facets">${facets}</div></div>`;
 }).join("");
@@ -400,7 +426,25 @@ document.getElementById("tbl-inc").innerHTML=h+"</tbody>";
 document.getElementById("note-inc").textContent=
   "Attack rate counts every animal that entered the phase, including those still in it or that left "+
   "part way through, so it is a floor. Per 100 median stays is the time-normalised cross-check: "+
-  "cases divided by total animal-days, scaled by the median length of the phase.";
+  "cases divided by total animal-days, scaled by the median length of the phase. Median day and IQR "+
+  "cover only cases on a true clock — see the timing section — while the attack rate covers all animals.";
+
+/* which animals can carry a day-of-phase clock */
+(function(){
+  const ex=D.watchExcluded||[]; if(!ex.length){document.getElementById("tbl-clock").closest(".card").style.display="none";return;}
+  let t="<thead><tr><th>Phase</th><th>Clock starts on</th><th>Animals in phase</th>"+
+    "<th>On a true clock</th><th>Clock starts at purchase</th><th>Born before records</th>"+
+    "<th>Timed cases</th><th>All cases</th></tr></thead><tbody>";
+  ex.forEach(r=>{
+    const ph=D.phases.find(x=>x.phase===r.phase)||{};
+    const kept=r.of-r.dropped;
+    t+=`<tr><td>${esc(r.phase)}</td><td>${esc(ph.clock||"")}</td><td>${r.of.toLocaleString()}</td>
+      <td>${kept.toLocaleString()} <span class="cap">(${(100*kept/r.of).toFixed(0)}%)</span></td>
+      <td class="${r.onPurchase?"hi":""}">${r.onPurchase.toLocaleString()}</td>
+      <td>${r.preHorizon.toLocaleString()}</td>
+      <td>${(ph.timedCases||0).toLocaleString()}</td><td>${(ph.cases||0).toLocaleString()}</td></tr>`;});
+  document.getElementById("tbl-clock").innerHTML=t+"</tbody>";
+})();
 
 /* onset charts */
 const W=1100,H=190,M={t:16,r:16,b:34,l:46};
@@ -418,7 +462,8 @@ document.getElementById("charts").innerHTML=PH.map(p=>{
       return c?`<rect x="${(x+0.6).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-1.2).toFixed(1)}"
         height="${(H-M.b-y).toFixed(1)}" fill="${si===0?C.alert:C.bar}" fill-opacity="${si===0?.85:.5}"/>`:"";}).join("");
     return `<div class="card"><h3>${esc(p)} &mdash; ${esc(s.disease)}</h3>
-      <p class="cap">${esc(ph.clock||"")}, in ${s.bin}-day bins</p>
+      <p class="cap">${esc(ph.clock||"")}, in ${s.bin}-day bins &mdash;
+        ${(ph.timedCases||0).toLocaleString()} of ${(ph.cases||0).toLocaleString()} cases on a true clock</p>
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="onset timing">
       ${[0,mx].map(v=>{const y=H-M.b-(v/mx)*(H-M.t-M.b);
         return `<line x1="${M.l}" y1="${y}" x2="${W-M.r}" y2="${y}" stroke="${C.grid}"/>

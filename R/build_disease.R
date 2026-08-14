@@ -122,6 +122,18 @@ pa <- vapply(seq_len(nrow(C)), function(i) ph_at(C$animal_id[i], C$start_date[i]
 C$phase_at_onset   <- pa[1, ]
 C$day_of_phase     <- as.numeric(pa[2, ])   # 0 = the day the phase began
 C$phase_length_days<- as.numeric(pa[3, ])
+## day_of_phase only means "days since birth/weaning" when the animal was here
+## for that event. For one bought later the clock starts at PURCHASE, so the
+## number is not comparable and must not sit in a day-of-phase distribution.
+.pk <- match(paste(C$animal_id, C$phase_at_onset), paste(PR$animal_id, PR$phase))
+C$clock_true <- ifelse(is.na(.pk), NA, PR$clock_true[.pk])
+C$clock_anchor <- ifelse(is.na(.pk), NA, PR$clock_anchor[.pk])
+C$flag_clock_not_true <- !is.na(C$clock_true) & !C$clock_true
+C$flag_pre_horizon_birth <- !is.na(C$birth_date) & C$birth_date < as.Date("2015-01-01")
+## the column a timing analysis should use: NA when the clock is not on its
+## true anchor, so it can never be silently averaged in
+C$day_of_phase_clean <- ifelse(!is.na(C$clock_true) & C$clock_true &
+                               !C$flag_pre_horizon_birth, C$day_of_phase, NA_real_)
 ## keep the treatment-derived phase too; they can disagree and that is worth seeing
 C$flag_phase_disagrees <- !is.na(C$phase_at_onset) & !is.na(C$phase_at_start) &
                           C$phase_at_onset != C$phase_at_start
@@ -181,17 +193,21 @@ cat("\n=== CASES BY PHASE AT ONSET ===\n")
 print(table(C$phase_at_start, C$disease, useNA="ifany")[, head(names(sort(table(C$disease),
       decreasing=TRUE)), 6), drop=FALSE])
 
-cat("\n=== DAY OF PHASE AT ONSET ===\n")
+cat("\n=== DAY OF PHASE AT ONSET (true-anchor cases only) ===\n")
+cat("Excluded from these distributions: cases whose clock starts at purchase\n")
+cat("rather than birth/weaning (", sum(C$flag_clock_not_true), "), and animals born before 2015 (",
+    sum(C$flag_pre_horizon_birth), ").\n", sep="")
 for (ph in c("Calf","Growing","Cow","Breeding")) {
-  s <- C[C$phase_at_onset %in% ph, ]
+  s <- C[C$phase_at_onset %in% ph & !is.na(C$day_of_phase_clean), ]
   if (!nrow(s)) next
-  cat(sprintf("\n%s (%s), n=%d\n", ph, PR$phase_clock[match(ph, PR$phase)], nrow(s)))
-  print(round(summary(s$day_of_phase)))
+  cat(sprintf("\n%s (%s), n=%d of %d\n", ph, PR$phase_clock[match(ph, PR$phase)], nrow(s),
+      sum(C$phase_at_onset %in% ph)))
+  print(round(summary(s$day_of_phase_clean)))
   top <- head(sort(table(s$disease), decreasing=TRUE), 4)
   for (dz in names(top)) {
-    v <- s$day_of_phase[s$disease == dz]
+    v <- s$day_of_phase_clean[s$disease == dz]
     cat(sprintf("   %-24s n=%-4d median day %3.0f   IQR %3.0f-%3.0f\n",
-        dz, length(v), median(v, na.rm=TRUE),
+        dz, sum(!is.na(v)), median(v, na.rm=TRUE),
         quantile(v, .25, na.rm=TRUE), quantile(v, .75, na.rm=TRUE)))
   }
 }
