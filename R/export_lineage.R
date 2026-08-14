@@ -9,7 +9,12 @@ rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="
 d10 <- function(x) as.Date(substr(x,1,10))
 q   <- function(x) paste0('"', gsub('"','\\\\"', ifelse(is.na(x),"",as.character(x))), '"')
 j   <- function(x) paste0("[", paste(x, collapse=","), "]")
+## p() builds ONE "key":value pair. kv() joins pairs with commas.
+## Passing the key, a ":" and the value as three separate args to kv() emits
+## "key", : ,value - malformed JSON that renders a blank page. Use p().
+p   <- function(k, v) paste0(q(k), ":", v)
 kv  <- function(...) paste0("{", paste(c(...), collapse=","), "}")
+num <- function(x) { x <- suppressWarnings(as.numeric(x)); ifelse(is.na(x), 0, x) }
 
 A  <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
 CS <- as.data.frame(arrow::read_parquet(file.path(SILVER,"cows.parquet")))
@@ -20,19 +25,19 @@ a  <- rd("animals.csv"); br <- rd("breedings.csv"); tx <- rd("treatments.csv")
 raw_animals <- nrow(a)
 ref         <- sum(a$status %in% "Reference")
 stages <- list(
-  kv(q("id")," : ",q("raw"),        ',"label":',q("animals.csv"),        ',"n":',raw_animals, ',"note":',q("every row CattleMax exported")),
-  kv(q("id")," : ",q("nonref"),     ',"label":',q("non-Reference"),      ',"n":',raw_animals-ref, ',"note":',q(paste0(format(ref,big.mark=",")," Reference rows removed"))),
-  kv(q("id")," : ",q("animals"),    ',"label":',q("animals.parquet"),    ',"n":',nrow(A), ',"note":',q(paste0(ncol(A)," columns, one row per animal"))),
-  kv(q("id")," : ",q("cows"),       ',"label":',q("cows.parquet"),       ',"n":',nrow(CS),',"note":',q(paste0(length(unique(CS$animal_id))," females, one row per season"))),
-  kv(q("id")," : ",q("treatments"), ',"label":',q("treatments.parquet"), ',"n":',nrow(TX),',"note":',q(paste0(length(unique(TX$animal_id))," animals, one row per event")))
+  kv(p("id",q("raw")),        p("label",q("animals.csv")),        p("n",raw_animals),     p("note",q("every row CattleMax exported"))),
+  kv(p("id",q("nonref")),     p("label",q("non-Reference")),      p("n",raw_animals-ref), p("note",q(paste0(format(ref,big.mark=",")," Reference rows removed")))),
+  kv(p("id",q("animals")),    p("label",q("animals.parquet")),    p("n",nrow(A)),         p("note",q(paste0(ncol(A)," columns, one row per animal")))),
+  kv(p("id",q("cows")),       p("label",q("cows.parquet")),       p("n",nrow(CS)),        p("note",q(paste0(length(unique(CS$animal_id))," females, one row per season")))),
+  kv(p("id",q("treatments")), p("label",q("treatments.parquet")), p("n",nrow(TX)),        p("note",q(paste0(length(unique(TX$animal_id))," animals, one row per event"))))
 )
 
 ## ---- every decision, with live counts ----
 dec <- function(id, stage, rule, detail, counts, validated)
-  kv(q("id"),":",q(id), ',"stage":',q(stage), ',"rule":',q(rule),
-     ',"detail":',q(detail), ',"counts":',counts, ',"validated":',q(validated))
-ct <- function(...) paste0("[", paste(sapply(list(...), function(p)
-        kv(q("k"),":",q(p[[1]]), ',"v":',q(p[[2]]))), collapse=","), "]")
+  kv(p("id",q(id)), p("stage",q(stage)), p("rule",q(rule)),
+     p("detail",q(detail)), p("counts",counts), p("validated",q(validated)))
+ct <- function(...) paste0("[", paste(sapply(list(...), function(z)
+        kv(p("k",q(z[[1]])), p("v",q(z[[2]])))), collapse=","), "]")
 
 D1 <- dec("reference","Filter",
   "Exclude status == Reference",
@@ -141,14 +146,30 @@ D12 <- dec("substance","treatments.parquet",
 
 ## ---- flags ----
 fl <- function(df,tbl) paste(sapply(grep("^flag_", names(df), value=TRUE), function(f)
-        kv(q("table"),":",q(tbl), ',"flag":',q(sub("^flag_","",f)), ',"n":',sum(df[[f]], na.rm=TRUE))), collapse=",")
+        kv(p("table",q(tbl)), p("flag",q(sub("^flag_","",f))),
+           p("n",num(sum(df[[f]], na.rm=TRUE))))), collapse=",")
 flags <- paste(fl(A,"animals.parquet"), fl(CS,"cows.parquet"), fl(TX,"treatments.parquet"), sep=",")
 
-json <- paste0('{"stages":[', paste(stages, collapse=","), ']',
-  ',"decisions":[', paste(c(D1,D2,D3,D4,D5,D6,D7,D8,D9,D10,D11,D12), collapse=","), ']',
-  ',"flags":[', flags, ']',
-  ',"herd":"River Creek Farms","pull":"81258_joe_mertz_202607291020","pulled":"2026-07-29"',
-  ',"horizon":',q(hz),
-  ',"generated":',q(format(Sys.Date())), '}')
+json <- kv(
+  p("stages",    j(unlist(stages))),
+  p("decisions", j(c(D1,D2,D3,D4,D5,D6,D7,D8,D9,D10,D11,D12))),
+  p("flags",     paste0("[", flags, "]")),
+  p("herd",      q("River Creek Farms")),
+  p("pull",      q("81258_joe_mertz_202607291020")),
+  p("pulled",    q("2026-07-29")),
+  p("horizon",   q(hz)),
+  p("generated", q(format(Sys.Date()))))
+
+## ---- VALIDATE before writing. A malformed payload renders a blank page,
+## and balanced braces do not prove a document parses.
+ok <- TRUE
+tryCatch({
+  chk <- jsonlite::fromJSON(json, simplifyVector=FALSE)
+  stopifnot(length(chk$stages)==5, length(chk$decisions)==12, length(chk$flags)>0)
+  cat("JSON parses OK - stages:", length(chk$stages),
+      " decisions:", length(chk$decisions), " flags:", length(chk$flags), "\n")
+}, error=function(e){ ok <<- FALSE; cat("*** JSON INVALID:", conditionMessage(e), "***\n") })
+if (!ok) stop("refusing to write malformed lineage.json")
+
 writeLines(json, file.path(OUT,"lineage.json"))
 cat("wrote lineage.json  bytes:", nchar(json), "\n")
