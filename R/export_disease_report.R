@@ -246,7 +246,80 @@ kpis <- c(
   mkkpi("BRD incidence",          "Respiratory (BRD)", "incidence", "%"),
   mkkpi("Pinkeye incidence",      "Ocular (pinkeye)",  "incidence", "%"))
 
+## ---- CURRENT GROUP vs THE LAST THREE YEARS, at the same day of phase ----
+## A rate on its own cannot say whether to worry. What matters is where this
+## group sits at the SAME point in the phase as the groups before it, because
+## the current group has not finished and its final rate is unknowable.
+##
+## For each phase and disease we build a cumulative incidence curve against
+## day-of-phase, with the denominator at day d being animals still at risk at
+## day d - so a group only part way through is never compared against a full
+## phase. The comparison is made at the day the current group has actually
+## reached, and nowhere beyond it.
+BASE_YEARS <- 3
+first_case <- C[order(C$animal_id, C$disease, C$start_date), ]
+first_case <- first_case[!duplicated(paste(first_case$animal_id, first_case$disease,
+                                           first_case$phase_at_onset)), ]
+cum_curve <- function(ids, dz, days_at_risk, maxday, step) {
+  fc <- first_case[first_case$animal_id %in% ids & first_case$disease == dz &
+                   !is.na(first_case$day_of_phase), ]
+  grid <- seq(0, maxday, by = step)
+  vapply(grid, function(d) {
+    atrisk <- sum(days_at_risk >= d)
+    if (!atrisk) return(NA_real_)
+    round(100 * sum(fc$day_of_phase <= d) / atrisk, 2)
+  }, numeric(1))
+}
+watch <- list()
+for (ph in PHASES) {
+  pr <- PR[PR$phase == ph, ]; if (!nrow(pr)) next
+  cs <- C[C$phase_at_onset %in% ph, ]; if (!nrow(cs)) next
+  ords <- sort(unique(pr$cohort_sort[pr$cohort_year >= cfg$report_from_year]))
+  ords <- ords[vapply(ords, function(o) sum(pr$cohort_sort == o) >= 15, logical(1))]
+  if (length(ords) < 2) next
+  cur_o  <- max(ords)
+  base_o <- ords[ords < cur_o & ords >= cur_o - BASE_YEARS*10]
+  if (!length(base_o)) next
+  curg  <- pr[pr$cohort_sort == cur_o, ]
+  baseg <- pr[pr$cohort_sort %in% base_o, ]
+  ## how far into the phase this group has actually got
+  now <- round(median(curg$days_at_risk))
+  maxday <- max(round(quantile(baseg$days_at_risk, .75)), now)
+  step <- max(7, round(maxday/40))
+  top <- names(head(sort(table(cs$disease[cs$animal_id %in% curg$animal_id]),
+                         decreasing = TRUE), 4))
+  top <- top[top != ""]
+  for (dz in top) {
+    cc <- cum_curve(curg$animal_id,  dz, curg$days_at_risk,  now,    step)
+    bb <- cum_curve(baseg$animal_id, dz, baseg$days_at_risk, maxday, step)
+    i_now <- length(cc)
+    cur_at <- cc[i_now]; base_at <- bb[min(i_now, length(bb))]
+    ratio <- if (!is.na(base_at) && base_at > 0) round(cur_at/base_at, 2) else NA_real_
+    n_cur <- sum(first_case$animal_id %in% curg$animal_id & first_case$disease == dz)
+    ## flag only when the gap is both proportionally and absolutely material,
+    ## and rests on enough cases to mean something
+    alarm <- !is.na(ratio) && ratio >= 1.3 && (cur_at - base_at) >= 2 && n_cur >= 10
+    better<- !is.na(ratio) && ratio <= 0.7 && (base_at - cur_at) >= 2 && n_cur >= 5
+    watch[[length(watch)+1]] <- jobj(
+      jp("phase", jq(ph)), jp("disease", jq(dz)),
+      jp("cohort", jq(curg$cohort[1])),
+      jp("baseCohorts", jq(paste(sort(unique(baseg$cohort)), collapse=", "))),
+      jp("nCur", nrow(curg)), jp("nBase", nrow(baseg)),
+      jp("casesCur", n_cur),
+      jp("now", now), jp("step", step), jp("maxday", maxday),
+      jp("curAt", ifelse(is.na(cur_at),"null",cur_at)),
+      jp("baseAt", ifelse(is.na(base_at),"null",base_at)),
+      jp("ratio", ifelse(is.na(ratio),"null",ratio)),
+      jp("alarm", tolower(as.character(alarm))),
+      jp("better", tolower(as.character(better))),
+      jp("cur",  jarr(ifelse(is.na(cc),"null",cc))),
+      jp("base", jarr(ifelse(is.na(bb),"null",bb))))
+  }
+}
+
 json <- jobj(
+  jp("watch", jarr(unlist(watch))),
+  jp("baseYears", BASE_YEARS),
   jp("kpis",  jarr(kpis)),
   jp("kpiYears", jarr(KY)),
   jp("composition", jarr(unlist(comp))),

@@ -5,19 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Herd Disease Report</title>
 <style>
+/* LVR clinical report styling. Neutral greys carry the page; a single bright
+   red is reserved for things a reader must not miss. */
 :root{
-  --alert:#944947; --alert-deep:#852d2b; --alert-soft:#f4eae9; --ui:#3a3634; --ui-2:#6b6663;
-  --paper:#f6f3f1; --panel:#fffdfc; --ink:#1d1d1d; --ink-2:#5a5350; --ink-3:#8b8280;
-  --rule:#e2dad7; --rule-2:#efe9e7; --bar:#5c5553; --bar-2:#b9b2af; --grid:#ece7e5; --axis:#a09795;
+  --alert:#d21f26; --alert-deep:#a5161c; --alert-soft:#fdecec; --ui:#33363a; --ui-2:#666b71;
+  --paper:#f4f5f6; --panel:#ffffff; --ink:#16181a; --ink-2:#4b5157; --ink-3:#848a90;
+  --rule:#dcdfe2; --rule-2:#eceef0; --bar:#585e64; --bar-2:#b4bac0; --grid:#e8eaec; --axis:#9aa0a6;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --alert:#c98a87; --alert-deep:#a85b58; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
-  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
-  --rule:#332c2c; --rule-2:#282222; --bar:#b3aba8; --bar-2:#5f5755; --grid:#262020; --axis:#7a706e;}}
+  --alert:#ff5a5f; --alert-deep:#d21f26; --alert-soft:#3a1416; --ui:#d5d8db; --ui-2:#959ba1;
+  --paper:#141618; --panel:#1c1f22; --ink:#eef0f2; --ink-2:#adb4ba; --ink-3:#7d848a;
+  --rule:#2c3034; --rule-2:#232629; --bar:#b0b6bc; --bar-2:#5a6066; --grid:#232629; --axis:#767c82;}}
 :root[data-theme="dark"]{
-  --alert:#c98a87; --alert-deep:#a85b58; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
-  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
-  --rule:#332c2c; --rule-2:#282222; --bar:#b3aba8; --bar-2:#5f5755; --grid:#262020; --axis:#7a706e;}
+  --alert:#ff5a5f; --alert-deep:#d21f26; --alert-soft:#3a1416; --ui:#d5d8db; --ui-2:#959ba1;
+  --paper:#141618; --panel:#1c1f22; --ink:#eef0f2; --ink-2:#adb4ba; --ink-3:#7d848a;
+  --rule:#2c3034; --rule-2:#232629; --bar:#b0b6bc; --bar-2:#5a6066; --grid:#232629; --axis:#767c82;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);
   font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55}
@@ -26,7 +28,11 @@ body{margin:0;background:var(--paper);color:var(--ink);
 header{border-bottom:2px solid var(--alert);padding:26px 0 16px}
 .brandline{display:flex;align-items:baseline;gap:13px;flex-wrap:wrap}
 .wordmark{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
-  text-transform:uppercase;letter-spacing:.14em;font-weight:700;font-size:clamp(18px,2.3vw,26px);margin:0}
+  text-transform:uppercase;letter-spacing:.2em;font-weight:700;font-size:clamp(19px,2.4vw,27px);
+  margin:0;color:var(--alert)}
+.herdname{margin-left:auto;font-family:"Arial Narrow","Roboto Condensed",sans-serif;
+  font-stretch:condensed;text-transform:uppercase;letter-spacing:.1em;font-weight:700;
+  font-size:clamp(14px,1.7vw,18px);color:var(--ink)}
 .doctype{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
   text-transform:uppercase;letter-spacing:.2em;font-size:11.5px;color:var(--ink-3);font-weight:700}
 h1{margin:9px 0 6px;font-size:clamp(22px,2.9vw,31px);font-weight:640;letter-spacing:-.02em}
@@ -101,6 +107,28 @@ td.yr{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size
 tr.dormant td.rawdx{color:var(--ink-3)}
 .tag-old{font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
   padding:1px 5px;border:1px solid var(--alert);color:var(--alert);border-radius:2px;white-space:nowrap}
+.verdict{border:1px solid var(--rule);border-left:4px solid var(--alert);background:var(--panel);
+  padding:14px 18px;margin:6px 0 4px}
+.verdict.ok{border-left-color:var(--ui-2)}
+.vh{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.09em;font-size:14px;font-weight:700;color:var(--alert);
+  margin-bottom:7px}
+.verdict.ok .vh{color:var(--ink)}
+.verdict ul{margin:0;padding-left:19px}
+.verdict li{margin-bottom:6px;font-size:14px;color:var(--ink-2)}
+.verdict li b{color:var(--ink)}
+.verdict p{margin:8px 0 0;font-size:13.5px;color:var(--ink-2)}
+.xmore{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;
+  color:var(--alert);white-space:nowrap}
+.vgood{color:var(--ink-3)!important;font-size:13px!important}
+.facet.flagged{border-color:var(--alert);border-width:1.5px}
+.tag-watch{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:1px 6px;background:var(--alert);color:#fff;border-radius:2px;vertical-align:2px}
+.tag-good{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:1px 6px;border:1px solid var(--ui-2);color:var(--ink-3);border-radius:2px;vertical-align:2px}
+.wnow{font-size:12px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.lg{display:inline-block;width:16px;height:3px;vertical-align:middle;margin-right:3px}
+.lg-cur{background:var(--alert)} .lg-base{background:var(--bar-2)}
 .facets{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:6px}
 .facet{border:1px solid var(--rule-2);padding:8px 10px 4px;background:var(--panel)}
 .facet h4{margin:0 0 1px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
@@ -116,8 +144,9 @@ tr.dormant td.rawdx{color:var(--ink-3)}
 <div class="wrap">
 <header>
   <div class="brandline">
-    <p class="wordmark" id="s-herd"></p>
+    <p class="wordmark">LVR</p>
     <span class="doctype">Herd Health Report</span>
+    <span class="herdname" id="s-herd"></span>
   </div>
   <h1>Disease incidence, timing and outcome</h1>
   <p class="sub">Every therapeutic treatment on the operation, grouped into disease
@@ -131,15 +160,19 @@ tr.dormant td.rawdx{color:var(--ink-3)}
   </div>
 </header>
 
-<div class="stats" id="tops"></div>
-<p class="note">Bars show each year from <span id="k-from"></span> to <span id="k-to"></span>; the
-darker bar is the latest. <b>Case fatality</b> is deaths among animals treated for that disease.
-<b>Incidence</b> is the share of all animals at risk that year treated for it at least once.
-Faint bars are years built on fewer than <span id="k-min"></span> cases &mdash; still shown, but too
-thin to rely on, so the headline value and the arrow are never taken from them. A
-<b>case</b> is a run of therapeutic treatments on one animal for one disease &mdash; treatments
-closer together than the episode gap are the same case, so counting treatments instead would
-inflate every figure by the re-treatment rate.</p>
+<div id="verdict"></div>
+<h2>Where the current groups stand right now</h2>
+<p class="lede">Each panel compares the group on the ground today against the same phase in the
+previous <span id="k-base"></span> years, <b>at the same day of the phase</b>. The current group has
+not finished, so its final rate is unknowable &mdash; but where it sits today against where previous
+groups sat on the same day is answerable, and it is the question worth asking.</p>
+<div id="watch"></div>
+<p class="note">The line is cumulative: the share of the group treated for that disease at least once
+by that day of the phase. The denominator at each day counts only animals still at risk on that day,
+so a part-finished group is never measured against a completed one. The vertical marker is how far
+into the phase the current group has actually got; nothing is drawn beyond it.
+A <b>case</b> is a run of therapeutic treatments on one animal for one disease &mdash; treatments
+closer together than the episode gap are the same case.</p>
 
 <h2>The groups on the ground now</h2>
 <p class="lede">The most recent cohort to enter each phase &mdash; the calves, growers and cows
@@ -200,46 +233,74 @@ document.getElementById("s-dw").textContent=D.deathWindow;
 document.getElementById("s-first").textContent=D.firstCase;
 document.getElementById("s-last").textContent=D.lastCase;
 
-/* ---- headline KPIs with an inline trend bar chart ---- */
-const KYRS=D.kpiYears||[];
-document.getElementById("k-from").textContent=KYRS[0];
-document.getElementById("k-to").textContent=KYRS[KYRS.length-1];
-document.getElementById("k-min").textContent=(D.kpis[0]||{}).minCases||10;
-document.getElementById("tops").innerHTML=D.kpis.map(k=>{
-  const s=k.series.map(v=>v==null?null:+v);
-  const mx=Math.max(...s.filter(v=>v!=null),1);
-  const w=100/s.length;
-  const rel=k.reliable||s.map(()=>true);
-  const curIdx=KYRS.indexOf(k.currentYear);
-  const bars=s.map((v,i)=>{
-    const yr=KYRS[i], thin=!rel[i];
-    if(v==null)return `<div class="kb" style="width:${w}%"><span class="kbar none"
-      title="${yr}: no cases"></span></div>`;
-    /* thin years stay visible but faint, and never carry the 'now' emphasis */
-    return `<div class="kb" style="width:${w}%" title="${yr}: ${v.toFixed(1)}${k.unit} from ${k.counts[i]} case${k.counts[i]===1?"":"s"}${thin?" — too few to rely on":""}">
-      <span class="kbar${thin?" thin":(i===curIdx?" now":"")}"
-        style="height:${Math.max(3,(v/mx)*100).toFixed(1)}%"></span></div>`;
+/* ---- CURRENT GROUPS vs the previous N years, at the same day of phase ---- */
+document.getElementById("k-base").textContent=D.baseYears;
+const alarms=D.watch.filter(w=>w.alarm);
+const betters=D.watch.filter(w=>w.better);
+document.getElementById("verdict").innerHTML = alarms.length
+  ? `<div class="verdict bad"><div class="vh">${alarms.length} thing${alarms.length===1?"":"s"} to look at now</div>
+      <ul>${alarms.sort((a,b)=>b.ratio-a.ratio).map(w=>
+        `<li><b>${esc(w.disease)}</b> in <b>${esc(w.phase.toLowerCase())}s</b> &mdash;
+         ${w.curAt.toFixed(1)}% of the ${esc(w.cohort)} group by day ${w.now},
+         against ${w.baseAt.toFixed(1)}% for the previous ${D.baseYears} years at the same point.
+         <span class="xmore">${w.ratio.toFixed(1)}&times; · ${w.casesCur} animals</span></li>`).join("")}</ul>
+      ${betters.length?`<p class="vgood">Better than the last ${D.baseYears} years: `+
+        betters.map(w=>`${esc(w.disease)} in ${esc(w.phase.toLowerCase())}s`).join(", ")+`.</p>`:""}
+     </div>`
+  : `<div class="verdict ok"><div class="vh">Nothing is running above the previous ${D.baseYears} years</div>
+     <p>Every current group is tracking at or below where the last ${D.baseYears} years sat at the
+     same day of the phase.</p></div>`;
+
+const WW=520,WH=210,WM={t:18,r:16,b:40,l:46};
+document.getElementById("watch").innerHTML=PH.map(p=>{
+  const ws=D.watch.filter(w=>w.phase===p);
+  if(!ws.length)return"";
+  const facets=ws.map(w=>{
+    const C={alert:cssv("--alert"),bar:cssv("--bar-2"),grid:cssv("--grid"),
+             axis:cssv("--axis"),panel:cssv("--panel"),ink:cssv("--ink"),lab:cssv("--ink-3")};
+    const cur=w.cur.map(v=>v==null?null:+v), base=w.base.map(v=>v==null?null:+v);
+    const mx=Math.max(...cur.filter(v=>v!=null),...base.filter(v=>v!=null),1)*1.15;
+    const nx=Math.max(base.length,cur.length);
+    const X=i=>WM.l+(i/(nx-1||1))*(WW-WM.l-WM.r);
+    const Y=v=>WH-WM.b-(v/mx)*(WH-WM.t-WM.b);
+    const path=a=>a.map((v,i)=>v==null?null:`${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
+                   .filter(Boolean).join(" ");
+    let o="";
+    [0,mx/2,mx].forEach(v=>{o+=`<line x1="${WM.l}" y1="${Y(v)}" x2="${WW-WM.r}" y2="${Y(v)}" stroke="${C.grid}"/>
+      <text class="tick" x="${WM.l-6}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(mx<6?1:0)}%</text>`;});
+    o+=`<polyline points="${path(base)}" fill="none" stroke="${C.bar}" stroke-width="2.5"/>`;
+    o+=`<polyline points="${path(cur)}" fill="none" stroke="${C.alert}" stroke-width="2.5"/>`;
+    /* where the current group has actually got to */
+    const xi=cur.length-1, xn=X(xi);
+    o+=`<line x1="${xn.toFixed(1)}" y1="${WM.t-4}" x2="${xn.toFixed(1)}" y2="${WH-WM.b}"
+        stroke="${C.ink}" stroke-dasharray="3 3" stroke-opacity=".45"/>`;
+    o+=`<text class="tick" x="${xn.toFixed(1)}" y="${WM.t-7}" text-anchor="middle" fill="${C.lab}">day ${w.now}</text>`;
+    if(cur[xi]!=null){
+      o+=`<circle cx="${xn.toFixed(1)}" cy="${Y(cur[xi]).toFixed(1)}" r="4.5" fill="${C.alert}"/>
+          <text class="wnow" x="${(xn-7).toFixed(1)}" y="${(Y(cur[xi])-9).toFixed(1)}" text-anchor="end"
+            fill="${C.alert}">${cur[xi].toFixed(1)}%</text>`;}
+    const bi=Math.min(xi,base.length-1);
+    if(base[bi]!=null){
+      o+=`<circle cx="${xn.toFixed(1)}" cy="${Y(base[bi]).toFixed(1)}" r="4" fill="${C.bar}"/>
+          <text class="tick" x="${(xn-7).toFixed(1)}" y="${(Y(base[bi])+14).toFixed(1)}" text-anchor="end">${base[bi].toFixed(1)}%</text>`;}
+    [0,Math.round(nx/2),nx-1].forEach(i=>o+=
+      `<text class="tick" x="${X(i).toFixed(1)}" y="${WH-WM.b+15}" text-anchor="middle">${i*w.step}</text>`);
+    o+=`<text class="tick" x="${WW-WM.r}" y="${WH-WM.b+30}" text-anchor="end">day of phase</text>`;
+    o+=`<line x1="${WM.l}" y1="${WH-WM.b}" x2="${WW-WM.r}" y2="${WH-WM.b}" stroke="${C.axis}"/>`;
+    return `<div class="facet${w.alarm?" flagged":""}">
+      <h4>${esc(w.disease)}${w.alarm?' <span class="tag-watch">watch</span>':
+        w.better?' <span class="tag-good">better</span>':""}</h4>
+      <p class="fcap">${w.curAt.toFixed(1)}% now vs ${w.baseAt.toFixed(1)}% prior ${D.baseYears} yr
+        ${w.ratio!=null?"· "+w.ratio.toFixed(1)+"×":""} · ${w.casesCur} animals</p>
+      <svg viewBox="0 0 ${WW} ${WH}" role="img" aria-label="${esc(w.disease)} current vs baseline">${o}</svg></div>`;
   }).join("");
-  const dir = (k.previous==null||k.current==null) ? "" :
-    (k.current>k.previous ? "up" : k.current<k.previous ? "down" : "flat");
-  const arrow = dir==="up"?"▲":dir==="down"?"▼":dir==="flat"?"■":"";
-  /* for these four, up is bad and down is good */
-  const bad = dir==="up";
-  const n = curIdx>=0 ? k.counts[curIdx] : 0;
-  const fatalN = curIdx>=0 ? k.fatalCounts[curIdx] : 0;
-  return `<div class="stat kpi${bad?" hot":""}">
-    <div class="k">${esc(k.label)}</div>
-    <div class="v">${k.current==null?"&mdash;":k.current.toFixed(1)+k.unit}
-      <span class="delta ${dir}">${arrow}</span></div>
-    <div class="kchart">${bars}</div>
-    <div class="kyrs"><span>${KYRS[0]}</span><span>${KYRS[KYRS.length-1]}</span></div>
-    <div class="n">${k.currentYear==null ? "no year has "+k.minCases+" cases yet"
-      : k.kind==="fatality"
-        ? fatalN+" death"+(fatalN===1?"":"s")+" of "+n+" cases in "+k.currentYear
-        : n+" of "+(curIdx>=0?k.denom[curIdx]:0).toLocaleString()+" animals at risk in "+k.currentYear}${
-        k.partial?" · part year":""}${
-        k.thinYears?` · ${k.thinYears} faint year${k.thinYears===1?"":"s"} under ${k.minCases} cases`:""}</div>
-  </div>`;}).join("");
+  const w0=ws[0];
+  return `<div class="card"><h3>${esc(p)} &mdash; ${esc(w0.cohort)}, ${w0.nCur} animals</h3>
+    <p class="cap"><span class="lg lg-cur"></span> this group &nbsp;
+      <span class="lg lg-base"></span> previous ${D.baseYears} years (${esc(w0.baseCohorts)}, ${w0.nBase} animals).
+      Dashed line is how far this group has got.</p>
+    <div class="facets">${facets}</div></div>`;
+}).join("");
 
 /* ---- the groups on the ground now ---- */
 document.getElementById("cur").innerHTML=D.current.map(c=>
