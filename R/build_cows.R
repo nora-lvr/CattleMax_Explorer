@@ -65,10 +65,17 @@ dam_use[i] <- aAll$dam_animal_id[i];     dam_src[i] <- "dam_animal_id(carrier)"
 nonref_calf <- !(aAll$status %in% "Reference") & !is.na(d10(aAll$birth_date))
 cat("=== calf -> carrier attribution ===\n")
 print(table(dam_src[nonref_calf], useNA="ifany"))
-cat("dropped, dam field names the DONOR    :", sum(nonref_calf & is.na(dam_use) & dam_is_donor), "\n")
-cat("dropped, no dam link at all           :", sum(nonref_calf & is.na(dam_use) & !dam_is_donor), "\n")
 cat("ET calves re-attributed away from the dam field:",
     sum(!is.na(recip) & !is.na(aAll$dam_animal_id) & recip != aAll$dam_animal_id), "\n\n")
+
+source("C:/GIT/CattleMax_Explorer/R/exclusions.R"); excl_reset()
+excl_add("cows.parquet", "calf: dam field names the ET donor, no recipient recoverable",
+         sum(nonref_calf & is.na(dam_use) & dam_is_donor),
+         detail="dam_animal_id == genetic_dam_animal_id; crediting it would credit the donor",
+         recoverable=TRUE)
+excl_add("cows.parquet", "calf: no dam link of any kind",
+         sum(nonref_calf & is.na(dam_use) & !dam_is_donor),
+         detail="no dam_animal_id and no breeding_id; carrier unknown", recoverable=FALSE)
 calves <- data.frame(calf_id = aAll$id,
                      dam     = dam_use,
                      dam_source = dam_src,
@@ -130,7 +137,7 @@ pc_by  <- split(pc, pc$animal_id)
 ## NB: start empty. This was pre-allocated to nrow(fem) and then appended to,
 ## leaving 1,993 leading NULLs that only survived because do.call(rbind, ...)
 ## silently drops them - it would break under rbindlist/bind_rows.
-rows <- list()
+rows <- list(); n_zero_len <- 0L
 for (k in seq_len(nrow(fem))) {
   f  <- fem[k, ]; aid <- f$animal_id
   cs <- cal_by[[aid]]; sv <- svc_by[[aid]]; pk <- pc_by[[aid]]
@@ -159,7 +166,10 @@ for (k in seq_len(nrow(fem))) {
     } else outcome <- "Calved"
     ## a zero-length season carries no information and produced 24 junk rows
     ## (2 of them flagged as calvings); drop them rather than emit them
-    if (is.na(st) || is.na(en) || en <= st) next
+    if (is.na(st) || is.na(en) || en <= st) {
+      if (!is.na(st) && !is.na(en) && en <= st) n_zero_len <- n_zero_len + 1L
+      next
+    }
 
     ## Half-open window [start, end): a service recorded ON a calving date
     ## belongs to the NEXT season, not to both. Closed-both-ends previously
@@ -277,6 +287,21 @@ CS$breeding_season <- ifelse(is.na(CS$breeding_type), NA, paste0(byear, " ", CS$
 CS$crop_type <- CS$breeding_type
 CS$crop_year <- ifelse(is.na(CS$breeding_type), NA_integer_, byear + 1L)
 CS$calf_crop <- ifelse(is.na(CS$breeding_type), NA, paste0(CS$crop_type, " ", CS$crop_year))
+
+## ---- record everything that did not make it into this table ----
+fem_all <- M[M$sex %in% "Heifer", ]
+excl_add("cows.parquet", "female: never calved and never exposed",
+         nrow(fem_all) - nrow(fem),
+         n_animals = nrow(fem_all) - nrow(fem),
+         detail="no calving event and no breeding record, so she has no season",
+         recoverable=TRUE)
+excl_add("cows.parquet", "animal: not sex == Heifer",
+         sum(!(M$sex %in% "Heifer")), n_animals = sum(!(M$sex %in% "Heifer")),
+         detail="bulls, steers and 24 animals with no sex; there is no bull-side table yet",
+         recoverable=TRUE)
+excl_add("cows.parquet", "season: zero length (start == end)", n_zero_len,
+         detail="carries no information; 2 of them were flagged as calvings", recoverable=FALSE)
+excl_write(SILVER)
 
 fp <- file.path(SILVER,"cows.parquet"); fc <- file.path(SILVER,"cows.csv")
 arrow::write_parquet(CS, fp, compression="snappy")

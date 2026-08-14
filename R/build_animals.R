@@ -193,6 +193,12 @@ M$flag_left_undated <- M$status %in% c("Sold","Dead") &
 
 SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
 dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
+source("C:/GIT/CattleMax_Explorer/R/exclusions.R"); excl_reset()
+excl_add("animals.parquet", "status == Reference",
+         sum(aAll$status %in% "Reference"), n_animals = sum(aAll$status %in% "Reference"),
+         detail="pedigree back-fill, never present on the operation; still used as calving events and sires",
+         recoverable=FALSE)
+excl_write(SILVER)
 f  <- file.path(SILVER,"animals.csv")
 fp <- file.path(SILVER,"animals.parquet")
 write.csv(M, f, row.names=FALSE, na="")

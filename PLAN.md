@@ -191,6 +191,26 @@ they exceed a threshold. Minimum flag set:
 **Policy: flag, don't chase.** The engine surfaces these counts so a report can raise a notice when
 the share is material; we do not hand-investigate individual animals.
 
+### The exclusions ledger (standing rule, Nora 2026-08-14)
+**Nothing is ever silently discarded.** Every record that falls out of a table or a report is
+written to `data/silver-data/exclusions.parquet` via `R/exclusions.R`, carrying the table, the
+reason, the count, a plain-English detail, and a `recoverable` flag saying whether a rule change
+could bring it back. **A report that excludes records without naming them is not finished.**
+
+Current ledger for River Creek — 15,658 records excluded in total:
+
+| table | reason | records | recoverable |
+|---|---|---|---|
+| animals.parquet | `status == Reference` | 12,182 | no |
+| cows.parquet | animal is not `sex == Heifer` (no bull-side table yet) | 1,896 | **yes** |
+| cows.parquet | female never calved and never exposed | 979 | **yes** |
+| cows.parquet | calf has no dam link of any kind | 485 | no |
+| cows.parquet | season of zero length | 85 | no |
+| cows.parquet | calf's dam field names the ET donor, no recipient recoverable | 31 | **yes** |
+
+The `recoverable = yes` rows are the ones worth revisiting: 2,906 records are out purely because of
+a rule we chose, not because the data is missing.
+
 This follows the mySYNCH chartability discipline (§5.4): **name what's uncertain, never drop it
 silently.**
 

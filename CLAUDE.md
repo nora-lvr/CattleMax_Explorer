@@ -53,6 +53,11 @@ Donor/Recipient is an orthogonal **role**, not a phase.
    `analysis_ready` before computing any rate, and show right-censored seasons as incomplete rather
    than plotting them as a collapse.
 10. **Charts greyscale; brand colour only for the few genuinely interesting things.**
+11. **NEVER silently discard anything.** If a record falls out of a table or a report, it is
+    recorded in the **exclusions ledger** (`R/exclusions.R` → `data/silver-data/exclusions.parquet`)
+    with what it was, why it went, how many, and whether a rule change could recover it. A report
+    that excludes records without naming them is not finished. This is Nora's standing rule
+    (2026-08-14) and it outranks tidiness.
 
 ## The core problem (Phase 1)
 Reconstruct **"count present cattle in any group on any date"** from `animals` (presence intervals) +
