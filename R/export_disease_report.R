@@ -143,7 +143,31 @@ for (ph in PHASES) {
   }
 }
 
+## ---- WHAT EACH CATEGORY IS MADE OF --------------------------------------
+## The grouped names are ours, not CattleMax's. Show the raw diagnoses behind
+## every category so a reader can see exactly what was rolled together, and
+## challenge it.
+TXa <- cm_read_silver(cfg, "treatments")
+th2 <- TXa[TXa$treatment_intent %in% "Therapeutic", ]
+th2$cat <- ifelse(is.na(th2$disease_category), "Unknown disease", th2$disease_category)
+th2$raw <- ifelse(is.na(th2$diagnosis), "(no diagnosis recorded)", th2$diagnosis)
+comp <- list()
+for (k in names(sort(table(th2$cat), decreasing = TRUE))) {
+  s <- th2[th2$cat == k, ]
+  tb <- sort(table(s$raw), decreasing = TRUE)
+  parts <- vapply(names(tb), function(rw) {
+    jobj(jp("raw", jq(rw)), jp("events", as.integer(tb[[rw]])),
+         jp("animals", length(unique(s$animal_id[s$raw == rw]))))
+  }, character(1))
+  comp[[length(comp)+1]] <- jobj(
+    jp("disease", jq(k)),
+    jp("events",  nrow(s)),
+    jp("nRaw",    length(tb)),
+    jp("parts",   jarr(parts)))
+}
+
 json <- jobj(
+  jp("composition", jarr(unlist(comp))),
   jp("trend",   jarr(unlist(trend))),
   jp("current", jarr(unlist(current))),
   jp("incidence", jarr(unlist(inc))),
