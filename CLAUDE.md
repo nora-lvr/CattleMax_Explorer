@@ -12,12 +12,15 @@ the repo) and let clients build their own reports. Owner: Nora (livestockvets@gm
 **Planning complete. No engine code written yet.** Do not start building until Nora says go.
 
 ## Locked decisions
-- **R core** (tidyverse). One metric defined once, in R — **single source of truth**, non-negotiable.
-- **Reports** call the R engine directly (Quarto). **Plain-English querying** is a thin **Python MCP
-  shim** that calls the same R functions via a CLI/JSON boundary — the developer owns that seam.
+- **Python core** (polars/pandas + DuckDB). One metric defined once, in Python — **single source of
+  truth**, non-negotiable. (Briefly R, flipped to Python 2026-08-13 for a single runtime across both
+  front doors; see PLAN.md decision-history note.)
+- **Reports**: Quarto with the Python engine, calling the engine directly. **Plain-English querying**:
+  a **native Python MCP server** calling the same Python functions — no cross-language seam.
 - **Denominator substrate**: a validated herd-state store (DuckDB/parquet) — the "who was present, in
   which group, on which date" layer, built once, read by the metric functions.
-- Distribution via **renv**; client drops their CattleMax pull into `data/`.
+- Distribution via **`uv`**; client drops their CattleMax pull into `data/`. Most clients receive a
+  rendered HTML and install nothing; self-render adds Python + Quarto; querying adds Claude Desktop.
 
 ## Golden rules
 1. **Never commit client data.** `data/` is gitignored. Confirm before any `git add -A`.
@@ -25,7 +28,7 @@ the repo) and let clients build their own reports. Owner: Nora (livestockvets@gm
    writes the sentence around a validated number.
 3. **Gates refuse and list valid options** rather than returning a plausible-wrong answer.
 4. **Stamp every answer** with pull + its date + metric definition + code version.
-5. **Read CSVs with a real quoted parser** (readr/DuckDB) — free-text fields contain commas/newlines.
+5. **Read CSVs with a real quoted parser** (polars/DuckDB) — free-text fields contain commas/newlines.
 6. **Exclude `status == "Reference"`** from presence — it's ~71% of rows and the biggest filter.
 
 ## The core problem (Phase 1)
@@ -41,4 +44,4 @@ in `data/` (gitignored). Keep every pull for cross-snapshot trends. See [data/RE
 - `C:\GIT\CattleMaxReports` — prior dirty R reports + a `Data Pulls/` archive. Mine for domain
   definitions; don't treat as gold.
 - `C:\GIT\mySYNCH_Explorer\llm-query-poc` — architecture/discipline exemplar (Python MCP, gates,
-  provenance, mutation tests). Different domain; follow its **system design**.
+  provenance, mutation tests). Different domain, **same language** — the closest template.

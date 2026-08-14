@@ -5,6 +5,14 @@ _Last updated: 2026-08-13. Owner: Nora (livestockvets@gmail.com). Status: **plan
 This is the durable specification for the project. It captures what we're building, why, the
 decisions we've locked, and the questions still open. Read this before writing any code.
 
+> **Decision history:** The core language was briefly locked to R (commit 764a7ad), then flipped to
+> **Python** the same day (2026-08-13). Reason: Python gives a **single runtime for both front
+> doors** (reports + plain-English querying), removing the R-engine/Python-shim seam; its data stack
+> (polars/DuckDB) is strong for the interval-join denominator work; and the client-install advantage
+> that favored R mostly evaporates once you notice **most clients receive a rendered HTML and install
+> nothing**. Nora owns the definitions and reads them in Python (polars ≈ dplyr); Claude authors the
+> code.
+
 ---
 
 ## 1. Purpose
@@ -31,8 +39,8 @@ Word/PPT output is a nice-to-have, explicitly **not** a priority.
 - Runs on **other people's machines**, not just Nora's.
 - **Everything except the data lives in the repo.** A client clones/receives the repo, drops their
   CattleMax export into the documented location, and has full function.
-- Reproducible environment via **renv** (R lockfile) so a client needs only R + the lockfile to
-  render reports.
+- Reproducible environment via **`uv`** (Python) so a client self-rendering needs only Python (+ the
+  Quarto installer) and one command to restore exact package versions.
 - The plain-English/LLM path has a **heavier, opt-in install** (see §4); the report path stays light.
 - Herd sizes: ~200 to ~5,000 **active** head. Not large data, but many animals go **inactive** each
   year, and reference animals inflate the files further (see §7). History spans years.
@@ -44,10 +52,12 @@ Word/PPT output is a nice-to-have, explicitly **not** a priority.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Core language | **R** (tidyverse) | Nora & clients live in R; she owns the fuzzy definitions and must audit/iterate them; reports are Quarto+R; existing domain code is R. |
-| Single source of truth | **One metric definition each, in R** | Reports and the LLM both call the same R functions. No metric defined twice. This is non-negotiable. |
-| LLM front door | **Thin Python MCP shim calling the R engine** via a clean CLI/JSON boundary | The mature MCP path is Python; the seam's complexity lands on the developer, not on Nora or clients. R computes, Python relays. |
-| Denominator substrate | **Validated herd-state store (DuckDB/parquet), language-neutral data** | Materialize the "who was present, in which group, on which date" layer once; both front doors read metric functions built on it. |
+| Core language | **Python** (polars/pandas + DuckDB) | One runtime serves both front doors; strong data stack for the interval-join denominator work; native MCP querying path. Nora owns the definitions (reads them via polars ≈ dplyr); Claude authors the code. |
+| Single source of truth | **One metric definition each, in Python** | Reports and the LLM both call the same Python functions. No metric defined twice. Non-negotiable. |
+| LLM front door | **Native Python MCP server** | Same runtime as the engine — no cross-language seam. |
+| Report front door | **Quarto with the Python (Jupyter) engine** | Renders HTML/PDF from the same engine functions. |
+| Environment / install | **`uv`** for one-command reproducible installs | Self-render needs Python + Quarto; querying needs Claude Desktop. Most clients receive rendered HTML and install nothing. |
+| Denominator substrate | **Validated herd-state store (DuckDB/parquet)** | Materialize "who was present, in which group, on which date" once; the metric functions read it. |
 | Data in git | **Never.** `data/` is gitignored. | Real client herd data. Confirmed nothing tracked; `data/` added to `.gitignore` 2026-08-13. |
 
 ---
@@ -57,19 +67,19 @@ Word/PPT output is a nice-to-have, explicitly **not** a priority.
 Layered, single source of truth for every metric:
 
 1. **Data contract + loader** — a documented, gitignored `data/` location holding native CattleMax
-   exports (one folder per pull). R loader reads the ~55 CSVs into a clean model **using a real
-   quoted-CSV parser** (readr / DuckDB), never naive splitting (see §7).
+   exports (one folder per pull). Python loader (polars / DuckDB) reads the ~55 CSVs into a clean
+   model **using a real quoted-CSV parser**, never naive splitting (see §7).
 2. **Herd-state / denominator engine** — the crown jewel (§6). As-of-any-date inventory + group
    membership, materialized to the DuckDB/parquet substrate. Validated hard.
-3. **Metrics library** — R functions for repro, health/treatment, mortality, growth/inventory. Each
-   has an explicit numerator/denominator definition and carries a provenance stamp.
+3. **Metrics library** — Python functions for repro, health/treatment, mortality, growth/inventory.
+   Each has an explicit numerator/denominator definition and carries a provenance stamp.
 4. **Trend + alert layer** — run metrics across event-dates (within a pull) and across pulls
    (snapshot-over-snapshot); flag against the herd's **own** history and against a target direction /
    threshold.
 5. **Two front doors on the same engine:**
-   - (a) Parameterized **Quarto** reports (HTML/PDF) a client renders themselves.
-   - (b) **Plain-English querying** via a Python MCP tool server that calls the same R metric
-     functions.
+   - (a) Parameterized **Quarto** reports (Python engine, HTML/PDF) a client renders themselves.
+   - (b) **Plain-English querying** via a native Python MCP tool server that calls the same Python
+     metric functions.
 
 ### Two independent sources of "trend over time"
 - **Within one pull** — most events carry dates (breedings, treatments, movements), so trends come
@@ -141,7 +151,7 @@ a single column.
   Reference animals are **71% of the file** — excluding them is the biggest single filter.
 - **CSV needs a real parser.** Free-text fields (comments, addresses) contain commas and newlines;
   naive splitting corrupts rows (some `sex`/`animal_type` values parsed as timestamps in a quick
-  scan). Use readr / DuckDB quoted-CSV reading only.
+  scan). Use polars / DuckDB quoted-CSV reading only.
 - **`categories` are current-snapshot enrollment tags, not history** — e.g. "Fall – Replacement
   Heifer (6 to 20 MOA)", "Bull – Next Spring Sale", "Donor – Open". They give today's classification,
   not the historical one. History comes from `movements` + `groups`.
@@ -176,7 +186,7 @@ Settled: presence = in data + present at any location for any time; **reference 
   - Goal: prove both front doors return **identical numbers**.
 - **Phase 3+ — expand:** metrics library (repro → health → mortality → growth), trend + alert layer
   (flag against the herd's own history and target direction), self-service report parameters.
-- **Throughout:** renv lockfile, documented `data/` drop layout, quickstart, so the repo runs on a
+- **Throughout:** `uv` lockfile, documented `data/` drop layout, quickstart, so the repo runs on a
   client machine with only their data added.
 
 **Metric priority order:** denominator engine first (fundamental), then Reproduction, Health &
@@ -186,13 +196,14 @@ treatments, Mortality / death loss, Inventory & growth.
 
 ## 10. Sibling repos (context, not dependencies)
 
-- **`C:\GIT\CattleMaxReports`** — prior, non-Claude R reports (BaseData.qmd, CowCalfReport.qmd,
+- **`C:\GIT\CattleMaxReports`** — prior, non-Claude **R** reports (BaseData.qmd, CowCalfReport.qmd,
   DiseaseEvaluation.qmd, clean_* functions, calf-crop logic) plus a `Data Pulls/` archive of many
   historical exports. **Dirty sandbox** — treat as a **domain-knowledge quarry** (how Nora defines
-  calf crop, disease overviews, denominators), not as gold-standard code. Rebuild clean.
+  calf crop, disease overviews, denominators). Since we're now Python, **re-derive the definitions,
+  don't port the R code.**
 - **`C:\GIT\mySYNCH_Explorer`** (`llm-query-poc/`) — an exemplar of the architecture and discipline
   in §5 (Python MCP server, validated tools, gates, provenance, mutation tests). Different domain
-  (dairy breeding), but the **system design** is the model to follow.
+  (dairy breeding), but **same language and same system design** — the closest template to follow.
 
 ---
 
