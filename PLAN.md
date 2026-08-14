@@ -194,9 +194,58 @@ the share is material; we do not hand-investigate individual animals.
 This follows the mySYNCH chartability discipline (§5.4): **name what's uncertain, never drop it
 silently.**
 
+### Production phases (locked 2026-08-14)
+Phases are defined by **events**, not by guesses about class, and both boundaries are stored as
+dates so "phase on date D" is a comparison rather than a stored label.
+
+| phase | starts at | ends |
+|---|---|---|
+| **Calf** | entry (birth, or purchase if bought as a calf) | weaning |
+| **Growing** | weaning | sale, first calving, or first breeding exposure |
+| **Cow** | first calving | exit |
+| **Breeding** | first exposure as a sire (`breedings.bull_animal_id`) | exit |
+
+Breeding is the male parallel to Cow. A bull never exposed stays in **Growing** until sold, which is
+correct for a seedstock herd where most bulls are product rather than breeding stock.
+Donor / Recipient remains an **orthogonal role**, not a phase.
+
+**Weaning precedence:** `weaning_date` → a `measurements` row of category *Weaning* → `weaning_weight`
+present (estimate birth + 205 d) → **age > 8 months** (assume weaned, flag it) → still nursing.
+The age backstop matters: without it, 207 animals over two years old with no weaning record are
+counted as nursing calves. River Creek's own weaning age is tight — median **7.0 months** — and the
+6–8 month bucket is empty, so any threshold in that gap is safe.
+
+### THE dam-field trap (verified 2026-08-14 — do not re-introduce)
+- **`dam_animal_id` = the female who CARRIED the calf.** Use this as the calving dam.
+- `real_dam_animal_id` = the registry / genetic dam. For ET calves it equals
+  `genetic_dam_animal_id` in **453 of 458** cases, i.e. it names the **donor**.
+- Using `real_dam` credits donors with their recipients' calvings. It made River Creek's Oct-2024
+  purchase of 314 commercial recipients look barren and understated that breeding season from
+  **76.5% calved to 44.7%**.
+
+### `cows.parquet` — the cow-season table
+One row per **cow-season**. A season **ends each time a calf is born**; the next season starts there.
+Season 1 opens at **first bull exposure** (falls back to entry when there is no breeding record).
+The final season is left open, or closed by her exit. Calvings within 7 days collapse into one
+event (twins/multiples) with `n_calves_born`.
+
+### Record horizon and censoring (Nora's ragged-start rule)
+CattleMax recording began only a few years ago; earlier births were back-filled as pedigree, so the
+start of the record is ragged and must never be silently averaged in. The horizon is **derived from
+the data** (earliest operational record — 2018-11-07 for River Creek; note `measurements` contains a
+junk 1900-01-01). Every cow-season carries `flag_left_censored`, `flag_right_censored`,
+`flag_parity_unknown`, and a single **`analysis_ready`** column that is the one to filter on before
+computing any rate or average. It matters: the median calving interval is 357 d overall, but the
+unfiltered set contains intervals of 1 day and 1,431 days.
+
+**Right-censoring is equally load-bearing:** a breeding season whose calves are not all due until
+after the pull date must be shown as incomplete, never plotted as a collapse. River Creek's 2025
+Fall season reads 0.004 calves/exposed purely because those calves are not born yet.
+
 ### Validation (must pass before building on it)
-- Reconcile the engine's as-of **active** count against CattleMax's own active count per pull (e.g.
-  1,857 Active in the Mertz export).
+- Reconcile the engine's as-of **active** count against CattleMax's own active count per pull.
+  **PASSED 2026-08-14 on River Creek:** phases at the pull date sum to Calf 325 + Growing 765 +
+  Cow 745 + Breeding 22 = **1,857**, exactly CattleMax's own active count.
 - Invariant tests: splitting a group can't create or lose cattle; presence intervals never overlap
   for one animal; counts across groups sum to the whole.
 - Provenance stamp on every number.
@@ -235,6 +284,24 @@ These are deliberately unresolved; we work them out by looking at real animals, 
 Settled: presence = in data + present at any location for any time; **reference animals excluded**.
 
 ---
+
+## 8b. Report styling (locked 2026-08-14)
+
+Reports are styled to the **client's own marketing identity**, so a herd recognises its own report.
+Per-herd branding lives as a small token set (colours + type) applied to a shared template.
+
+**River Creek Farms** — taken from their live site: brick red `#944947`, deep `#852d2b`,
+near-black `#1d1d1d`, greys `#7a7a7a` / `#a7a7a7`; display faces *Rift* and *URWDINSemiCond*
+(condensed, industrial — echoed with a condensed system stack since webfonts cannot be embedded).
+Tagline "SimAngus Bulls Built to Work", "A Family Tradition Since 1890".
+
+**Charts stay greyscale.** The brand colour is reserved for a very small number of genuinely
+interesting things — currently only: incomplete-season markers, the "incomplete" pill, the warning
+panel, and one thin rule under the masthead. Everything else is neutral grey.
+
+**Delivery:** a single self-contained HTML file — all data embedded, no external requests — so a
+client can be emailed the report and open it with nothing installed. This is the default path for
+most clients (see §2).
 
 ## 9. Phased plan
 

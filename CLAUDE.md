@@ -9,7 +9,22 @@ A tool for a beef **cow-calf veterinary practice** to turn CattleMax herd export
 the repo) and let clients build their own reports. Owner: Nora (livestockvets@gmail.com).
 
 ## Status
-**Planning complete. No engine code written yet.** Do not start building until Nora says go.
+**Phase 1 built and reconciled.** A working R pipeline (`R/`) produces the silver layer and a
+branded, self-contained HTML report. The denominator engine **reconciles exactly** to CattleMax's
+own active count (1,857 on River Creek). PLAN.md still locks Python as the eventual engine language;
+the R scripts are the sandbox that pinned down the rules — see [R/README.md](R/README.md).
+
+## What exists
+- `R/build_animals.R` → `data/silver-data/animals.parquet` — one row per animal, every event date,
+  phase boundaries as dates, entry/exit each with a `_rule` column, six `flag_*` columns.
+- `R/build_cows.R` → `data/silver-data/cows.parquet` — one row per **cow-season** (a season ends at
+  each calving), with censoring flags and a single `analysis_ready` column.
+- `R/export_*_json.R` + `reports/templates/herd_report.html` → a self-contained, emailable report.
+
+## Production phases (locked)
+**Calf** (entry→weaning) · **Growing** (weaning→sale/first calving/first exposure) ·
+**Cow** (first calving→exit) · **Breeding** (first use as a sire→exit).
+Donor/Recipient is an orthogonal **role**, not a phase.
 
 ## Locked decisions
 - **Python core** (polars/pandas + DuckDB). One metric defined once, in Python — **single source of
@@ -30,6 +45,14 @@ the repo) and let clients build their own reports. Owner: Nora (livestockvets@gm
 4. **Stamp every answer** with pull + its date + metric definition + code version.
 5. **Read CSVs with a real quoted parser** (polars/DuckDB) — free-text fields contain commas/newlines.
 6. **Exclude `status == "Reference"`** from presence — it's ~71% of rows and the biggest filter.
+7. **`dam_animal_id` is the female who CARRIED the calf.** `real_dam_animal_id` is the genetic/registry
+   dam and for ET calves names the **donor** — using it credits donors with their recipients'
+   calvings and makes a recipient herd look barren. See PLAN.md §6.
+8. **Never use `updated_at` as a departure date** — it's a bulk record-edit stamp.
+9. **Respect the record horizon.** CattleMax recording starts only a few years back; filter on
+   `analysis_ready` before computing any rate, and show right-censored seasons as incomplete rather
+   than plotting them as a collapse.
+10. **Charts greyscale; brand colour only for the few genuinely interesting things.**
 
 ## The core problem (Phase 1)
 Reconstruct **"count present cattle in any group on any date"** from `animals` (presence intervals) +

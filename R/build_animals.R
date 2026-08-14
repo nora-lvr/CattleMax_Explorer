@@ -1,0 +1,164 @@
+## ---------------------------------------------------------------
+## animal_master : one row per animal, every event date that matters.
+## This is the denominator substrate. Phases are derived from it.
+## ---------------------------------------------------------------
+options(width=220)
+D   <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
+DER <- "C:/GIT/CattleMax_Explorer/data/derived"
+dir.create(DER, showWarnings=FALSE, recursive=TRUE)
+rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
+d10 <- function(x) as.Date(substr(x,1,10))
+D8  <- function(n) as.Date(rep(NA_real_,n), origin="1970-01-01")
+mn  <- function(df,idc,dtc,ids){ v<-tapply(as.integer(d10(df[[dtc]])), df[[idc]], min, na.rm=TRUE)
+                                 as.Date(v[ids], origin="1970-01-01") }
+mxd <- function(df,idc,dtc,ids){ v<-tapply(as.integer(d10(df[[dtc]])), df[[idc]], max, na.rm=TRUE)
+                                 as.Date(v[ids], origin="1970-01-01") }
+PULL <- as.Date("2026-07-29")
+
+aAll<-rd("animals.csv"); st<-rd("sale_tickets.csv"); mv<-rd("movements.csv")
+ms<-rd("measurements.csv"); tx<-rd("treatments.csv"); nt<-rd("animal_notes.csv")
+br<-rd("breedings.csv"); em<-rd("embryos.csv"); fl<-rd("flushes.csv")
+pc<-rd("pregnancy_checks.csv")
+
+a  <- aAll[!(aAll$status %in% "Reference"), ]
+id <- a$id; n <- nrow(a)
+M  <- data.frame(animal_id=id, stringsAsFactors=FALSE)
+
+## ---- identity ----
+M$ear_tag <- a$ear_tag; M$name <- a$name
+M$sex <- a$sex; M$animal_type <- a$animal_type; M$status <- a$status
+M$category_id <- a$category_id
+
+## ---- raw event dates ----
+M$birth_date    <- d10(a$birth_date)
+M$purchase_date <- d10(a$purchase_date)
+M$purchased     <- a$purchased %in% "true"
+M$sale_date     <- d10(a$sale_date)
+M$death_date    <- d10(a$death_date)
+tick            <- setNames(d10(st$sale_date), st$id)
+M$sale_ticket_date <- tick[a$sale_ticket_id]
+
+## ---- last activity across every dated child table ----
+la <- suppressWarnings(pmax(
+  mxd(mv,"animal_id","movement_date",id), mxd(ms,"animal_id","measure_date",id),
+  mxd(tx,"animal_id","treatment_date",id), mxd(nt,"animal_id","note_date",id),
+  mxd(br,"animal_id","breeding_date",id), na.rm=TRUE))
+la[is.infinite(la)] <- NA
+M$last_activity_date <- as.Date(la, origin="1970-01-01")
+M$first_movement_date <- mn(mv,"animal_id","movement_date",id)
+
+## ---- WEANING, by documented precedence ----
+mw   <- ms[grepl("^wean", ms$category, ignore.case=TRUE), ]
+mwd  <- mn(mw,"animal_id","measure_date",id)
+hasw <- function(x) !is.na(x)
+wsrc <- rep(NA_character_,n); wdate <- D8(n)
+take <- function(w,v,lab){ i<-is.na(w)&hasw(v); w[i]<-v[i]; wsrc[i]<<-lab; w }
+wdate <- take(wdate, d10(a$weaning_date), "weaning_date")
+wdate <- take(wdate, mwd,                 "weaning_measurement")
+i <- is.na(wdate) & hasw(a$weaning_weight) & hasw(M$birth_date)
+wdate[i] <- M$birth_date[i]+205; wsrc[i] <- "weaning_weight(EST 205d)"
+age_mo <- as.numeric(PULL - M$birth_date)/30.44
+i <- is.na(wdate) & !is.na(age_mo) & age_mo > 8
+wdate[i] <- M$birth_date[i]+205; wsrc[i] <- "age>8mo(ASSUMED 205d)"
+wsrc[is.na(wdate)] <- "none(still nursing)"
+M$weaning_date <- wdate; M$weaning_source <- wsrc
+
+## ---- reproduction milestones ----
+calf_bd <- d10(aAll$birth_date); dam <- aAll$dam_animal_id
+ok <- !is.na(dam) & !is.na(calf_bd)
+M$first_calving_date <- as.Date(tapply(as.integer(calf_bd[ok]), dam[ok], min)[id], origin="1970-01-01")
+M$n_calves <- as.integer(table(factor(dam[ok], levels=id)))
+M$first_service_date  <- mn(br,"animal_id","breeding_date",id)
+M$last_service_date   <- mxd(br,"animal_id","breeding_date",id)
+M$first_preg_check    <- mn(pc,"animal_id","check_date",id)
+useb <- br[!is.na(br$bull_animal_id), ]
+M$first_sire_use_date <- mn(useb,"bull_animal_id","breeding_date",id)
+
+## ---- role (orthogonal to phase) ----
+dstart <- suppressWarnings(pmin(mn(fl,"animal_id","flush_date",id),
+                                mn(em,"animal_id","collection_date",id), na.rm=TRUE))
+dstart[is.infinite(dstart)] <- NA
+M$donor_start <- as.Date(dstart, origin="1970-01-01")
+etb <- br[!is.na(br$embryo_id), ]
+M$recipient_start <- mn(etb,"animal_id","breeding_date",id)
+
+## ---- ENTRY ----
+ent <- M$purchase_date; er <- rep("purchase_date",n)
+i<-is.na(ent); ent[i]<-M$birth_date[i];         er[i]<-"birth_date"
+i<-is.na(ent); ent[i]<-M$first_movement_date[i];er[i]<-"first_movement(EST)"
+i<-is.na(ent); ent[i]<-d10(a$created_at)[i];    er[i]<-"created_at(EST)"
+M$entry_date <- ent; M$entry_rule <- er
+
+## ---- EXIT (documented precedence; never updated_at) ----
+gone <- M$status %in% c("Sold","Dead")
+ex <- D8(n); xr <- rep(NA_character_,n)
+put <- function(e,v,lab){ i<-is.na(e)&!is.na(v); e[i]<-v[i]; xr[i]<<-lab; e }
+ex <- put(ex, M$sale_date,        "sale_date")
+ex <- put(ex, M$death_date,       "death_date")
+ex <- put(ex, M$sale_ticket_date, "sale_ticket")
+tmp <- M$last_activity_date; tmp[!gone] <- NA
+ex <- put(ex, tmp,                "last_activity(EST)")
+i <- gone & is.na(ex); ex[i] <- M$entry_date[i]; xr[i] <- "none(entry-only)"
+xr[!gone] <- "open"
+M$exit_date <- ex; M$exit_rule <- xr
+## inactivated = left the herd with neither a sale nor a death date
+M$inactivated_date <- as.Date(ifelse(gone & is.na(M$sale_date) & is.na(M$death_date) &
+                                     is.na(M$sale_ticket_date), ex, NA), origin="1970-01-01")
+
+## ---- PHASE BOUNDARIES ----
+M$calf_start  <- M$entry_date
+growing <- M$weaning_date
+growing[!is.na(M$entry_date) & !is.na(growing) & growing < M$entry_date] <- M$entry_date[!is.na(M$entry_date) & !is.na(growing) & growing < M$entry_date]
+M$growing_start  <- growing
+M$cow_start   <- M$first_calving_date
+M$sire_start  <- ifelse(M$sex %in% "Bull", M$first_sire_use_date, NA)
+M$sire_start  <- as.Date(M$sire_start, origin="1970-01-01")
+
+phase_at <- function(d){
+  p <- rep(NA_character_, n)
+  live <- !is.na(M$entry_date) & M$entry_date<=d & (is.na(M$exit_date) | M$exit_date>=d)
+  p[live] <- "Calf"
+  p[live & !is.na(M$growing_start) & M$growing_start<=d] <- "Growing"
+  p[live & !is.na(M$sire_start) & M$sire_start<=d] <- "Breeding"
+  p[live & !is.na(M$cow_start)  & M$cow_start<=d]  <- "Cow"
+  p
+}
+M$phase_now <- phase_at(PULL)
+
+## ---- static group membership (undated in CattleMax; snapshot only) ----
+gg <- rd("groupings.csv"); gr <- rd("groups.csv")
+gg$gname <- gr$name[match(gg$group_id, gr$id)]
+gl <- tapply(gg$gname[!is.na(gg$gname)], gg$animal_id[!is.na(gg$gname)],
+             function(v) paste(sort(unique(v)), collapse="; "))
+M$group_names <- unname(gl[id])
+M$category_name <- setNames(rd("categories.csv")$name, rd("categories.csv")$id)[a$category_id]
+
+## ---- FLAGS ----
+M$flag_placeholder_birth <- !is.na(M$birth_date) & format(M$birth_date,"%m-%d")=="01-01"
+M$flag_exit_estimated    <- M$exit_rule %in% c("last_activity(EST)","none(entry-only)")
+M$flag_entry_estimated   <- M$entry_rule %in% c("first_movement(EST)","created_at(EST)")
+M$flag_weaning_assumed   <- M$weaning_source %in% c("weaning_weight(EST 205d)","age>8mo(ASSUMED 205d)")
+M$flag_no_birth_date     <- is.na(M$birth_date)
+M$flag_exit_before_entry <- !is.na(M$exit_date) & !is.na(M$entry_date) & M$exit_date < M$entry_date
+
+SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
+dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
+f  <- file.path(SILVER,"animals.csv")
+fp <- file.path(SILVER,"animals.parquet")
+write.csv(M, f, row.names=FALSE, na="")
+arrow::write_parquet(M, fp, compression="snappy")
+cat("WROTE", fp, sprintf("(%.0f KB)", file.size(fp)/1024), "\n")
+cat("WROTE", f,  sprintf("(%.0f KB)", file.size(f)/1024), "\n")
+cat(" rows:", nrow(M), " cols:", ncol(M), "\n\n")
+
+cat("=== columns ===\n"); print(names(M))
+cat("\n=== phase now (pull date", format(PULL), ") ===\n"); print(table(M$phase_now, useNA="ifany"))
+cat("\n=== phase now x sex ===\n"); print(table(M$phase_now, M$sex, useNA="ifany"))
+cat("\n=== weaning source ===\n"); print(sort(table(M$weaning_source), decreasing=TRUE))
+cat("\n=== exit rule ===\n"); print(sort(table(M$exit_rule), decreasing=TRUE))
+cat("\n=== entry rule ===\n"); print(sort(table(M$entry_rule), decreasing=TRUE))
+cat("\n=== data-quality flags ===\n")
+print(sapply(M[,grep("^flag_",names(M))], sum))
+cat("\ninactivated (gone, no sale or death date):", sum(!is.na(M$inactivated_date)), "\n")
+cat("\n=== ACTIVE only: phase counts ===\n")
+print(table(M$phase_now[M$status=="Active"], useNA="ifany"))

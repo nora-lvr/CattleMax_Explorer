@@ -1,0 +1,214 @@
+## ---------------------------------------------------------------
+## cows.parquet : one row per COW-SEASON.
+## A season ENDS each time a calf is born; the next season starts there.
+## Season 1 starts when she enters the breeding herd (first service, else entry).
+## The final season is left OPEN (still running) or closed by her exit.
+## ---------------------------------------------------------------
+options(width=220)
+D      <- "C:/GIT/CattleMax_Explorer/data/81258_joe_mertz_202607291020"
+SILVER <- "C:/GIT/CattleMax_Explorer/data/silver-data"
+dir.create(SILVER, showWarnings=FALSE, recursive=TRUE)
+rd  <- function(f) read.csv(file.path(D,f), stringsAsFactors=FALSE, colClasses="character", na.strings=c("","NA"))
+d10 <- function(x) as.Date(substr(x,1,10))
+PULL <- as.Date("2026-07-29")
+
+M   <- as.data.frame(arrow::read_parquet(file.path(SILVER,"animals.parquet")))
+aAll<- rd("animals.csv"); br <- rd("breedings.csv"); pc <- rd("pregnancy_checks.csv")
+br$bdate <- d10(br$breeding_date); br <- br[!is.na(br$bdate), ]
+pc$cdate <- d10(pc$check_date)
+
+## ---- RECORD HORIZON -------------------------------------------------
+## CattleMax recording started only a few years ago; births before that were
+## back-filled as pedigree. Anything starting before the horizon has an
+## incomplete history and must be flagged, never silently averaged in.
+mv <- rd("movements.csv"); ms <- rd("measurements.csv"); tx <- rd("treatments.csv")
+horiz <- c(breeding    = min(br$bdate, na.rm=TRUE),
+           movement    = min(d10(mv$movement_date), na.rm=TRUE),
+           measurement = min(d10(ms$measure_date),  na.rm=TRUE),
+           treatment   = min(d10(tx$treatment_date),na.rm=TRUE))
+cat("=== earliest operational record per table ===\n")
+print(as.Date(horiz, origin="1970-01-01"))
+## the horizon is where the OPERATIONAL record starts: first breeding recorded
+HORIZON <- as.Date(min(horiz[c("breeding","movement")]), origin="1970-01-01")
+cat("RECORD HORIZON used:", format(HORIZON), "\n\n")
+
+## ---- every calving event: who actually CARRIED the calf ----------------
+## VERIFIED against the Oct-2024 recipient purchase block:
+##   dam_animal_id      = the female who CARRIED and calved  <- use this
+##   real_dam_animal_id = the registry/genetic dam; for ET calves it equals
+##                        genetic_dam_animal_id in 453 of 458 cases (the DONOR)
+## Using real_dam credits the donor with her recipients' calvings and makes a
+## recipient herd look barren, so it must NOT be used as the calving dam.
+realdam <- aAll$real_dam_animal_id
+gdam    <- aAll$genetic_dam_animal_id
+dam_use <- ifelse(!is.na(aAll$dam_animal_id), aAll$dam_animal_id, realdam)
+dam_src <- ifelse(!is.na(aAll$dam_animal_id), "dam_animal_id(carrier)", "real_dam(fallback)")
+calves <- data.frame(calf_id = aAll$id,
+                     dam     = dam_use,
+                     dam_source = dam_src,
+                     genetic_dam = gdam,
+                     cbd     = d10(aAll$birth_date),
+                     csex    = aAll$sex,
+                     cstatus = aAll$status,
+                     cmethod = aAll$conception_method,
+                     stringsAsFactors = FALSE)
+calves <- calves[!is.na(calves$dam) & !is.na(calves$cbd), ]
+calves <- calves[order(calves$dam, calves$cbd), ]
+cat("calving events by dam source:\n"); print(table(calves$dam_source))
+
+## ---- collapse same-birth clusters (twins / multiples) into ONE calving ----
+calves$grp <- NA_integer_
+sp <- split(seq_len(nrow(calves)), calves$dam)
+for (ix in sp) {
+  d <- calves$cbd[ix]; g <- cumsum(c(1, as.numeric(diff(d)) > 7))
+  calves$grp[ix] <- g
+}
+cl <- aggregate(cbd ~ dam + grp, calves, min)
+nb <- aggregate(calf_id ~ dam + grp, calves, length); names(nb)[3] <- "n_born"
+cl <- merge(cl, nb, by=c("dam","grp"))
+cl <- cl[order(cl$dam, cl$cbd), ]
+cat("\ncalving EVENTS after collapsing multiples:", nrow(cl),
+    " (from", nrow(calves), "calf records)\n")
+cat("events with >1 calf (twins/multiples):", sum(cl$n_born>1),
+    " max calves in one event:", max(cl$n_born), "\n\n")
+calves <- merge(calves, cl[,c("dam","grp","n_born")], by=c("dam","grp"), all.x=TRUE)
+
+## ---- which females get seasons: ever calved OR ever exposed ----
+ever_calved  <- unique(calves$dam)
+ever_exposed <- unique(br$animal_id)
+fem <- M[M$sex %in% "Heifer" & (M$animal_id %in% ever_calved | M$animal_id %in% ever_exposed), ]
+cat("females with at least one calving or exposure:", nrow(fem), "\n")
+
+svc_by <- split(br, br$animal_id)
+cal_by <- split(calves, calves$dam)
+pc_by  <- split(pc, pc$animal_id)
+
+rows <- vector("list", nrow(fem))
+for (k in seq_len(nrow(fem))) {
+  f  <- fem[k, ]; aid <- f$animal_id
+  cs <- cal_by[[aid]]; sv <- svc_by[[aid]]; pk <- pc_by[[aid]]
+  ## one entry per calving EVENT (multiples already collapsed)
+  ev <- if (!is.null(cs)) unique(cs[order(cs$cbd), c("grp","cbd","n_born")]) else NULL
+  cdates <- if (!is.null(ev)) ev$cbd else as.Date(character(0))
+
+  ## season 1 start: entry into the breeding herd
+  s1 <- if (!is.null(sv) && nrow(sv)) min(sv$bdate, na.rm=TRUE) else f$entry_date
+  s1rule <- if (!is.null(sv) && nrow(sv)) "first_service" else "entry_date"
+  ## if she calved before any recorded service, back up to conception
+  if (length(cdates) && !is.na(s1) && cdates[1] < s1) { s1 <- cdates[1]-283; s1rule <- "first_calving-283d" }
+
+  starts <- c(s1, cdates)
+  ends   <- c(cdates, NA)                      # last season left open
+  nsz    <- length(starts)
+  for (i in seq_len(nsz)) {
+    st <- starts[i]; en <- ends[i]
+    calved <- !is.na(en)
+    ## an open season is closed by her exit, or censored at the pull date
+    if (!calved) {
+      if (!is.na(f$exit_date)) { en <- f$exit_date; outcome <- "Exited without calving" }
+      else                     { en <- PULL;        outcome <- "Open at pull date" }
+    } else outcome <- "Calved"
+    if (is.na(st) || is.na(en) || en < st) next
+
+    s <- if (!is.null(sv) && nrow(sv)) {
+           sv[sv$bdate >= st & sv$bdate <= en, , drop=FALSE]
+         } else br[0, , drop=FALSE]
+    npc   <- if (!is.null(pk)) sum(pk$cdate >= st & pk$cdate <= en, na.rm=TRUE) else 0L
+    calf  <- if (calved) cs[cs$cbd == en, ][1, ] else NULL
+
+    rows[[length(rows)+1]] <- data.frame(
+      animal_id   = aid,
+      ear_tag     = f$ear_tag,
+      parity      = i - 1L,                      # 0 = pre-first-calving season
+      season_index= i,
+      season_start= st,
+      season_end  = en,
+      start_rule  = if (i==1) s1rule else "previous_calving",
+      outcome     = outcome,
+      calved      = calved,
+      season_days = as.numeric(en - st),
+      calving_interval_days = if (i > 1 && calved) as.numeric(en - st) else NA_real_,
+      age_at_start_days = if (!is.na(f$birth_date)) as.numeric(st - f$birth_date) else NA_real_,
+      exposed     = nrow(s) > 0,
+      n_services  = nrow(s),
+      first_service = if (nrow(s)) min(s$bdate) else as.Date(NA),
+      last_service  = if (nrow(s)) max(s$bdate) else as.Date(NA),
+      methods     = if (nrow(s)) paste(sort(unique(s$breeding_method)), collapse="/") else NA_character_,
+      any_et      = if (nrow(s)) any(!is.na(s$embryo_id)) else FALSE,
+      days_to_first_service = if (nrow(s)) as.numeric(min(s$bdate) - st) else NA_real_,
+      n_preg_checks = npc,
+      calf_id     = if (calved && !is.null(calf)) calf$calf_id else NA_character_,
+      calf_birth_date = if (calved) en else as.Date(NA),
+      calf_sex    = if (calved && !is.null(calf)) calf$csex else NA_character_,
+      n_calves_born = if (calved && !is.null(calf)) as.integer(calf$n_born) else NA_integer_,
+      dam_link_source = if (calved && !is.null(calf)) calf$dam_source else NA_character_,
+      conception_method = if (calved && !is.null(calf)) calf$cmethod else NA_character_,
+      gestation_days = if (calved && nrow(s)) as.numeric(en - max(s$bdate)) else NA_real_,
+      dam_status  = f$status,
+      donor       = !is.na(f$donor_start)     && f$donor_start     <= en,
+      recipient   = !is.na(f$recipient_start) && f$recipient_start <= en,
+      censored    = outcome == "Open at pull date",
+      stringsAsFactors = FALSE)
+  }
+}
+CS <- do.call(rbind, rows)
+CS <- CS[order(CS$animal_id, CS$season_index), ]
+CS$flag_no_service_record <- CS$exposed == FALSE
+CS$flag_long_interval     <- !is.na(CS$calving_interval_days) & CS$calving_interval_days > 450
+CS$flag_short_interval    <- !is.na(CS$calving_interval_days) & CS$calving_interval_days < 300
+
+## ---- CENSORING / RAGGED-START FLAGS ------------------------------------
+## CattleMax recording began at HORIZON. A season that opens before it may be
+## missing prior calvings and services entirely: it is LEFT-censored and must
+## be excluded from interval and rate averages unless deliberately included.
+CS$record_horizon      <- HORIZON
+CS$flag_left_censored  <- CS$season_start < HORIZON
+CS$flag_spans_horizon  <- CS$season_start < HORIZON & CS$season_end >= HORIZON
+CS$flag_right_censored <- CS$censored
+## first season opening before the horizon: her earlier calvings may be unrecorded,
+## so "parity" is a floor, not a true parity
+CS$flag_parity_unknown <- CS$season_index == 1 & CS$season_start < HORIZON
+CS$flag_no_dam_birthdate <- is.na(CS$age_at_start_days)
+CS$flag_multiple_birth <- !is.na(CS$n_calves_born) & CS$n_calves_born > 1
+## >3 calves in one "event" is not a birth - it is an ET donor credited with her
+## flush, or a block of placeholder birth dates. Never a real calving.
+CS$flag_implausible_multiple <- !is.na(CS$n_calves_born) & CS$n_calves_born > 3
+CS$age_at_calving_yrs <- (CS$age_at_start_days + CS$season_days)/365.25
+CS$flag_impossible_age <- CS$calved & !is.na(CS$age_at_calving_yrs) & CS$age_at_calving_yrs < 1.5
+## a season is ANALYSIS-READY only if it is closed by a calving and fully inside the record
+CS$analysis_ready <- CS$calved & !CS$flag_left_censored & !CS$flag_right_censored &
+                     !CS$flag_implausible_multiple & !CS$flag_impossible_age
+
+fp <- file.path(SILVER,"cows.parquet"); fc <- file.path(SILVER,"cows.csv")
+arrow::write_parquet(CS, fp, compression="snappy")
+write.csv(CS, fc, row.names=FALSE, na="")
+cat("\nWROTE", fp, sprintf("(%.0f KB)", file.size(fp)/1024), "\n")
+cat(" cow-seasons:", nrow(CS), " cows:", length(unique(CS$animal_id)), " cols:", ncol(CS), "\n\n")
+
+cat("=== outcome ===\n");       print(table(CS$outcome))
+cat("\n=== parity (0 = season before her first calf) ===\n"); print(table(pmin(CS$parity,8)))
+cat("\n=== exposed within the season ===\n"); print(table(CS$exposed))
+cat("\n=== calving interval, ALL vs ANALYSIS-READY (days) ===\n")
+cat("all intervals      (n=", sum(!is.na(CS$calving_interval_days)), "):\n", sep="")
+print(round(summary(CS$calving_interval_days[!is.na(CS$calving_interval_days)])))
+ar <- CS$calving_interval_days[CS$analysis_ready & !is.na(CS$calving_interval_days)]
+cat("analysis-ready only (n=", length(ar), "):\n", sep="")
+print(round(summary(ar)))
+
+cat("\n=== censoring ===\n")
+print(c(left_censored=sum(CS$flag_left_censored), spans_horizon=sum(CS$flag_spans_horizon),
+        right_censored=sum(CS$flag_right_censored), parity_unknown=sum(CS$flag_parity_unknown),
+        analysis_ready=sum(CS$analysis_ready)))
+cat("\n=== seasons per calendar year of season_end, with analysis-ready share ===\n")
+yy <- format(CS$season_end,"%Y")
+print(data.frame(year=names(table(yy)), seasons=as.integer(table(yy)),
+                 ready=as.integer(table(factor(yy[CS$analysis_ready], levels=names(table(yy))))),
+                 row.names=NULL))
+cat("\n=== age at first calving (years) ===\n")
+f1 <- CS[CS$season_index==1 & CS$calved, ]
+print(round(summary((f1$age_at_start_days + f1$season_days)/365.25),2))
+cat("\n=== gestation from last service (days) ===\n")
+print(round(summary(CS$gestation_days[!is.na(CS$gestation_days) & CS$gestation_days>150 & CS$gestation_days<330])))
+cat("\n=== flags ===\n")
+print(c(no_service_record=sum(CS$flag_no_service_record), long_interval=sum(CS$flag_long_interval),
+        short_interval=sum(CS$flag_short_interval), censored=sum(CS$censored)))

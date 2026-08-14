@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>River Creek Herd Report</title>
+<style>
+:root{
+  --alert:#944947; --alert-deep:#852d2b; --alert-soft:#f4eae9; --ui:#3a3634; --ui-2:#6b6663;
+  --paper:#f6f3f1; --panel:#fffdfc; --ink:#1d1d1d; --ink-2:#5a5350; --ink-3:#8b8280;
+  --rule:#e2dad7; --rule-2:#efe9e7;
+  --band-spring:#e6e2df; --band-fall:#d2cbc8;
+  --violin-fill:#bdb6b3; --violin-stroke:#5c5553;
+  --box-fill:#fffdfc; --box-stroke:#1d1d1d;
+  --point:#1d1d1d; --point-alpha:.55;
+  --bar:#4a4341; --grid:#ece7e5; --axis:#a09795; --marker:#1d1d1d;
+  --good:#4a6b45; --warn:#8a6d1f;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --alert:#c98a87; --alert-deep:#a85b58; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
+    --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
+    --rule:#332c2c; --rule-2:#282222;
+    --band-spring:#2b2626; --band-fall:#3b3433;
+    --violin-fill:#5f5755; --violin-stroke:#aaa2a0;
+    --box-fill:#171414; --box-stroke:#f1ecea;
+    --point:#f1ecea; --point-alpha:.6;
+    --bar:#cdc4c1; --grid:#262020; --axis:#7a706e; --marker:#f1ecea;
+    --good:#8fb387; --warn:#d4b25e;
+  }
+}
+:root[data-theme="dark"]{
+  --alert:#c98a87; --alert-deep:#a85b58; --alert-soft:#33211f; --ui:#d8d2d0; --ui-2:#9a9491;
+  --paper:#171414; --panel:#201c1c; --ink:#f1ecea; --ink-2:#b5aca9; --ink-3:#867d7a;
+  --rule:#332c2c; --rule-2:#282222;
+  --band-spring:#2b2626; --band-fall:#3b3433;
+  --violin-fill:#5f5755; --violin-stroke:#aaa2a0;
+  --box-fill:#171414; --box-stroke:#f1ecea;
+  --point:#f1ecea; --point-alpha:.6;
+  --bar:#cdc4c1; --grid:#262020; --axis:#7a706e; --marker:#f1ecea;
+  --good:#8fb387; --warn:#d4b25e;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px;line-height:1.5}
+.cond{font-family:"Arial Narrow","Helvetica Neue Condensed",
+  "Roboto Condensed",ui-sans-serif,system-ui,sans-serif;font-stretch:condensed}
+.wrap{max-width:1560px;margin:0 auto;padding:0 26px 52px}
+
+/* ---- masthead ---- */
+.mast{border-bottom:2px solid var(--alert);padding:26px 0 0;margin-bottom:0}
+.brandline{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.wordmark{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.14em;font-weight:700;
+  font-size:clamp(20px,2.5vw,29px);color:var(--ink);margin:0}
+.rule-v{width:1px;height:22px;background:var(--rule);display:inline-block}
+.doctype{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.20em;font-size:12px;color:var(--ink-3);font-weight:700}
+h1{margin:10px 0 6px;font-size:clamp(23px,3vw,34px);font-weight:650;letter-spacing:-.02em;text-wrap:balance}
+.sub{margin:0 0 14px;color:var(--ink-2);font-size:14.5px;max-width:72ch}
+.stamp{display:flex;flex-wrap:wrap;gap:6px 18px;padding-bottom:16px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-3)}
+.stamp b{color:var(--ink-2);font-weight:600}
+
+/* ---- tabs ---- */
+nav.tabs{display:flex;gap:0;border-bottom:1px solid var(--rule);margin:0 0 24px;flex-wrap:wrap}
+nav.tabs button{font:inherit;font-family:"Arial Narrow","Roboto Condensed",sans-serif;
+  font-stretch:condensed;text-transform:uppercase;letter-spacing:.10em;font-weight:700;font-size:13px;
+  background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-1px;
+  padding:11px 18px;color:var(--ink-3);cursor:pointer}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+section[hidden]{display:none}
+
+.layout{display:grid;grid-template-columns:246px minmax(0,1fr);gap:24px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.rail{background:var(--panel);border:1px solid var(--rule);padding:16px 15px;
+  position:sticky;top:18px;display:flex;flex-direction:column;gap:19px}
+@media(max-width:900px){.rail{position:static}}
+.grp{display:flex;flex-direction:column;gap:9px}
+.lbl{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ui)}
+label.row{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px;color:var(--ink)}
+label.row input{accent-color:var(--ui);width:15px;height:15px;margin:0;cursor:pointer}
+label.row:hover{color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--ui);margin:0}
+.val{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;
+  color:var(--ink-2);font-variant-numeric:tabular-nums}
+select{font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--ink);width:100%}
+:focus-visible{outline:2px solid var(--ui);outline-offset:2px}
+.card{background:var(--panel);border:1px solid var(--rule);padding:13px 15px 9px;
+  overflow-x:auto;margin-bottom:20px}
+.card h2{margin:0 0 2px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.09em;font-size:14px;font-weight:700;color:var(--ink)}
+.card p.cap{margin:0 0 9px;font-size:12px;color:var(--ink-3)}
+svg{display:block;width:100%;height:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);margin-bottom:20px}
+.stat{background:var(--panel);padding:12px 14px;border-top:2px solid var(--ui)}
+.stat .k{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  font-size:11.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.stat .v{font-size:26px;font-weight:650;letter-spacing:-.02em;margin-top:3px;
+  font-variant-numeric:tabular-nums;line-height:1.15}
+.stat .n{font-size:12px;color:var(--ink-3);margin-top:2px}
+.warn{border-left:3px solid var(--alert);padding:10px 13px;background:var(--alert-soft);
+  font-size:12.5px;color:var(--ink-2);margin-bottom:20px}
+.note{font-size:12.5px;color:var(--ink-3);max-width:82ch;margin:0 0 8px}
+table.grid{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+table.grid th{font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.08em;font-size:11.5px;color:var(--ink-3);
+  text-align:right;padding:7px 9px;border-bottom:1.5px solid var(--rule);white-space:nowrap}
+table.grid th:first-child{text-align:left}
+table.grid td{padding:6px 9px;border-bottom:1px solid var(--rule-2);text-align:right;white-space:nowrap}
+table.grid td:first-child{text-align:left;font-weight:600}
+table.grid tr.incomplete td{color:var(--ink-3);font-style:italic}
+.pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;padding:2px 7px;border:1px solid var(--alert);color:var(--alert)}
+.tick{font-size:11px;fill:var(--axis);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.seaslab{font-size:11.5px;font-weight:700;fill:var(--ink-3);letter-spacing:.06em}
+.zoombar{display:flex;align-items:center;gap:12px;margin:0 0 7px;flex-wrap:wrap}
+.zoombar button{font:inherit;font-size:12px;padding:3px 10px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--ink-2);cursor:pointer}
+.zoombar button:hover{color:var(--ink);border-color:var(--ui-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="brandline">
+    <p class="wordmark">River Creek Farms</p>
+    <span class="rule-v"></span>
+    <span class="doctype">Herd Report</span>
+  </div>
+  <h1>Calving pattern and reproductive performance</h1>
+  <p class="sub">Built from the CattleMax export. Every figure below is computed from the
+  validated herd-state tables, and anything estimated or incomplete is labelled as such.</p>
+  <div class="stamp">
+    <span>pull <b id="s-pull"></b></span>
+    <span>pulled <b id="s-date"></b></span>
+    <span>source <b id="s-src"></b></span>
+    <span>record horizon <b id="s-hz"></b></span>
+    <span>excludes <b>status = Reference</b></span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" id="tab-calving" aria-selected="true" aria-controls="sec-calving">Calving pattern</button>
+  <button role="tab" id="tab-expo" aria-selected="false" aria-controls="sec-expo">Calves per exposed female</button>
+</nav>
+
+<!-- ================= SECTION 1 ================= -->
+<section id="sec-calving" role="tabpanel" aria-labelledby="tab-calving">
+<div class="layout">
+  <aside class="rail">
+    <div class="grp">
+      <span class="lbl">Show calves</span>
+      <select id="filt"></select>
+      <span class="val" id="filt-n"></span>
+    </div>
+    <div class="grp">
+      <span class="lbl">Layers</span>
+      <label class="row"><input type="checkbox" id="l-bands" checked> Season bands</label>
+      <label class="row"><input type="checkbox" id="l-violin" checked> Violins</label>
+      <label class="row"><input type="checkbox" id="l-box" checked> Box plots</label>
+      <label class="row"><input type="checkbox" id="l-points" checked> Calves</label>
+      <label class="row"><input type="checkbox" id="l-median"> Median trend</label>
+      <label class="row"><input type="checkbox" id="l-grid" checked> Month grid</label>
+      <label class="row"><input type="checkbox" id="l-marks" checked> Jan 1 / Jul 1 lines</label>
+    </div>
+    <div class="grp">
+      <span class="lbl">Violin scale</span>
+      <label class="row"><input type="radio" name="vs" value="w" checked> Equal width</label>
+      <label class="row"><input type="radio" name="vs" value="c"> Scaled by count</label>
+    </div>
+    <div class="grp">
+      <span class="lbl">Histogram bin</span>
+      <input type="range" id="bin" min="1" max="30" step="1" value="1">
+      <span class="val" id="bin-v">1 day</span>
+    </div>
+    <div class="grp">
+      <span class="lbl">Births/day y axis</span>
+      <label class="row"><input type="checkbox" id="y99" checked> Cap at 99th percentile</label>
+    </div>
+    <div class="grp">
+      <span class="lbl">Box width</span>
+      <input type="range" id="bw" min="0.04" max="0.60" step="0.02" value="0.18">
+      <span class="val" id="bw-v">0.18</span>
+    </div>
+    <div class="grp">
+      <span class="lbl">Calf dot size</span>
+      <input type="range" id="ps" min="0.6" max="3" step="0.1" value="1.5">
+      <span class="val" id="ps-v">1.5</span>
+    </div>
+    <div class="grp">
+      <span class="lbl">Years</span>
+      <select id="y0"></select>
+      <select id="y1"></select>
+    </div>
+  </aside>
+  <main>
+    <div class="stats" id="stats"></div>
+    <div class="warn" id="warn" hidden></div>
+    <div class="card">
+      <h2>Births per day</h2>
+      <p class="cap">Bin size set in the rail. Solid line = Jan 1, dashed = Jul 1.
+        <b>Drag across the chart to zoom</b>; double-click to reset.</p>
+      <div class="zoombar">
+        <span class="val" id="zoom-lab"></span>
+        <button type="button" id="zoom-reset">Reset zoom</button>
+      </div>
+      <svg id="hist" viewBox="0 0 1240 330" style="cursor:crosshair;touch-action:none"
+        role="img" aria-label="Calf births per day"></svg>
+    </div>
+    <div class="card">
+      <h2>Distribution by year</h2>
+      <p class="cap">Violin and box are computed within each half of the year, so a median
+        describes a real calving block rather than the gap between two.</p>
+      <svg id="plot" viewBox="0 0 1240 720" role="img" aria-label="Calving distribution by year"></svg>
+    </div>
+    <p class="note" id="note"></p>
+  </main>
+</div>
+</section>
+
+<!-- ================= SECTION 2 ================= -->
+<section id="sec-expo" role="tabpanel" aria-labelledby="tab-expo" hidden>
+  <div class="stats" id="xstats"></div>
+  <div class="warn" id="xwarn"></div>
+  <div class="card">
+    <h2>Calves per exposed female, by breeding season</h2>
+    <p class="cap">A female enters a season when she is first served in it. Bars outlined
+      rather than filled are still incomplete &mdash; some of their calves are not due until
+      after the data pull, so their rate is not yet comparable.</p>
+    <svg id="xchart" viewBox="0 0 1240 430" role="img" aria-label="Calves per exposed female"></svg>
+  </div>
+  <div class="card">
+    <h2>Season detail</h2>
+    <p class="cap">Exposed = distinct cow-seasons served in that breeding season.</p>
+    <table class="grid" id="xtable"></table>
+  </div>
+  <p class="note" id="xnote"></p>
+</section>
+
+</div>
+
+<script>
+const DATA = /*__DATA__*/;
+const EXPO = /*__EXPO__*/;
+const N=DATA.n, T=DATA.t, DOY=DATA.doy, YR=DATA.yr;
+const SPRING=[1,181], FALL=[182,366];
+const MONTH=[1,32,60,91,121,152,182,213,244,274,305,335];
+const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const ACTIVE_K=(DATA.status&&DATA.status.names?DATA.status.names.indexOf("Active"):-1)+1;
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rnd=mulberry32(20260729), JX=[], JY=[];
+for(let i=0;i<N;i++){JX.push(rnd()*.6-.3);JY.push(rnd()*3-1.5);}
+
+/* ---- filters ---- */
+const FILTERS=[{label:"All calves",n:N,test:null}];
+function addDim(dim,kind){ if(!dim||!dim.names)return;
+  dim.names.forEach((nm,k)=>{const c=dim.counts[k]||0; if(!c)return;
+    FILTERS.push({label:kind+": "+nm,n:c,test:i=>dim.idx[i]===k+1});});}
+addDim(DATA.phase,"Phase"); addDim(DATA.sex,"Sex"); addDim(DATA.status,"Status");
+addDim(DATA.cat,"Category"); addDim(DATA.weaning,"Weaning");
+if(DATA.groups&&DATA.groups.names)DATA.groups.names.forEach((nm,k)=>{
+  const mem=new Set(DATA.groups.members[k]); if(!mem.size)return;
+  FILTERS.push({label:"Group: "+nm,n:mem.size,test:i=>mem.has(i)});});
+
+const quant=(s,p)=>{if(!s.length)return NaN;const h=(s.length-1)*p,lo=Math.floor(h);
+  return s[lo]+(h-lo)*((s[Math.min(lo+1,s.length-1)])-s[lo]);};
+function kde(v,from,to,adjust,m){
+  const n=v.length,s=v.slice().sort((a,b)=>a-b);
+  const mean=v.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(v.reduce((a,b)=>a+(b-mean)*(b-mean),0)/Math.max(n-1,1));
+  const iqr=quant(s,.75)-quant(s,.25);
+  let bw=0.9*Math.min(sd,iqr/1.34||sd)*Math.pow(n,-0.2)*adjust; if(!(bw>0))bw=3;
+  const xs=[],ys=[];
+  for(let k=0;k<m;k++){const x=from+(to-from)*k/(m-1);let y=0;
+    for(let i=0;i<n;i++){const z=(x-v[i])/bw;y+=Math.exp(-.5*z*z);}
+    xs.push(x);ys.push(y/(n*bw*2.5066282746));}
+  return{xs,ys};}
+function pick(){
+  const f=FILTERS[+document.getElementById("filt").value];
+  const a=+document.getElementById("y0").value,b=+document.getElementById("y1").value;
+  const lo=Math.min(a,b),hi=Math.max(a,b),out=[];
+  for(let i=0;i<N;i++){if(YR[i]<lo||YR[i]>hi)continue;if(f.test&&!f.test(i))continue;out.push(i);}
+  return{idx:out,lo,hi,label:f.label};}
+
+/* ---- histogram with zoom ---- */
+let ZOOM=null; const HIST={W:1240,H:330,M:{t:16,r:20,b:34,l:56}};
+const baseD=()=>new Date(DATA.base+"T00:00:00Z");
+const fmtT=t=>{const d=new Date(baseD().getTime()+t*86400000);
+  return MN[d.getUTCMonth()]+" "+d.getUTCDate()+" "+d.getUTCFullYear();};
+function drawHist(sel){
+  const {W,H,M}=HIST, C={bar:cssv("--bar"),axis:cssv("--axis"),mk:cssv("--marker")};
+  const on=id=>document.getElementById(id).checked;
+  if(!sel.idx.length){document.getElementById("hist").innerHTML="";
+    document.getElementById("zoom-lab").textContent="no calves in this selection";return;}
+  let f0=Infinity,f1=-Infinity;
+  sel.idx.forEach(i=>{if(T[i]<f0)f0=T[i];if(T[i]>f1)f1=T[i];});
+  if(f1<=f0)f1=f0+1;
+  let t0=f0,t1=f1;
+  if(ZOOM){t0=Math.max(f0,ZOOM[0]);t1=Math.min(f1,ZOOM[1]);if(t1-t0<1){t0=f0;t1=f1;ZOOM=null;}}
+  HIST.t0=t0;HIST.t1=t1;
+  document.getElementById("zoom-lab").textContent=(ZOOM?"zoomed: ":"full range: ")+fmtT(t0)+"  to  "+fmtT(t1);
+  const BIN=Math.max(1,Math.round(+document.getElementById("bin").value));
+  const cnt=new Map(); let mx=0;
+  sel.idx.forEach(i=>{const t=T[i];if(t<t0||t>t1)return;const b=Math.floor(t/BIN)*BIN;
+    const c=(cnt.get(b)||0)+1;cnt.set(b,c);if(c>mx)mx=c;});
+  if(!mx)mx=1;
+  const daily=[...cnt.values()].sort((a,b)=>a-b);
+  const p99=Math.max(1,Math.ceil(quant(daily,0.99)));
+  const ytop=document.getElementById("y99").checked?p99:mx;
+  const clipped=daily.filter(c=>c>ytop).length;
+  const X=t=>M.l+((t-t0)/(t1-t0))*(W-M.l-M.r);
+  const Y=c=>H-M.b-(Math.min(c,ytop)/ytop)*(H-M.t-M.b);
+  const base=baseD(); const dayOf=t=>new Date(base.getTime()+t*86400000);
+  let o=[];
+  if(on("l-marks"))for(let y=dayOf(t0).getUTCFullYear();y<=dayOf(t1).getUTCFullYear()+1;y++){
+    [[0,"solid"],[6,"dash"]].forEach(([mo,kind])=>{
+      const t=Math.round((Date.UTC(y,mo,1)-base.getTime())/86400000); if(t<t0||t>t1)return;
+      o.push(`<line x1="${X(t).toFixed(1)}" y1="${M.t}" x2="${X(t).toFixed(1)}" y2="${H-M.b}" stroke="${C.mk}" ${kind==="dash"?'stroke-dasharray="4 3" stroke-opacity=".4"':'stroke-opacity=".65"'}/>`);
+      if(kind==="solid")o.push(`<text class="tick" x="${X(t).toFixed(1)}" y="${H-M.b+18}" text-anchor="middle">${y}</text>`);});}
+  const pxDay=(W-M.l-M.r)/(t1-t0), bwPx=Math.max(1,pxDay*BIN-(BIN>1?0.6:0));
+  cnt.forEach((c,b)=>{const x=X(b),yv=Y(c);
+    o.push(`<rect x="${x.toFixed(2)}" y="${yv.toFixed(1)}" width="${bwPx.toFixed(2)}" height="${Math.max(H-M.b-yv,0.5).toFixed(1)}" fill="${C.bar}"/>`);
+    if(c>ytop){const cx=x+bwPx/2;
+      o.push(`<polygon points="${(cx-3).toFixed(1)},${M.t+1} ${(cx+3).toFixed(1)},${M.t+1} ${cx.toFixed(1)},${M.t-4}" fill="${C.bar}"/>`);}});
+  [...new Set([0,Math.round(ytop/2),ytop])].forEach(v=>
+    o.push(`<text class="tick" x="${M.l-8}" y="${Y(v)+4}" text-anchor="end">${v}</text>`));
+  o.push(`<line x1="${M.l}" y1="${H-M.b}" x2="${W-M.r}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  o.push(`<line x1="${M.l}" y1="${M.t}" x2="${M.l}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  o.push(`<text class="tick" x="${M.l}" y="${M.t-4}">calves per ${BIN===1?"day":BIN+" days"}</text>`);
+  if(clipped)o.push(`<text class="tick" x="${W-M.r}" y="${M.t-4}" text-anchor="end">${clipped} bin${clipped>1?"s":""} above ${ytop} (peak ${mx}) clipped</text>`);
+  document.getElementById("hist").innerHTML=o.join("");}
+
+/* ---- seasonal plot ---- */
+function drawPlot(sel){
+  const W=1240,H=720,M={t:22,r:92,b:40,l:60};
+  const on=id=>document.getElementById(id).checked;
+  const vs=document.querySelector('input[name=vs]:checked').value;
+  const bw=+document.getElementById("bw").value, ps=+document.getElementById("ps").value;
+  const C={bandS:cssv("--band-spring"),bandF:cssv("--band-fall"),vf:cssv("--violin-fill"),
+    vst:cssv("--violin-stroke"),bf:cssv("--box-fill"),bs:cssv("--box-stroke"),
+    pt:cssv("--point"),pa:cssv("--point-alpha"),grid:cssv("--grid"),axis:cssv("--axis"),mk:cssv("--marker")};
+  const YS=[];for(let y=sel.lo;y<=sel.hi;y++)YS.push(y);
+  const span=YS.length,X=y=>M.l+((y-sel.lo+0.5)/span)*(W-M.l-M.r);
+  const slot=(W-M.l-M.r)/span, Y=d=>M.t+((d-1)/365)*(H-M.t-M.b);
+  let o=[];
+  if(on("l-bands")){
+    o.push(`<rect x="${M.l}" y="${Y(SPRING[0])}" width="${W-M.l-M.r}" height="${Y(SPRING[1])-Y(SPRING[0])}" fill="${C.bandS}"/>`);
+    o.push(`<rect x="${M.l}" y="${Y(FALL[0])}" width="${W-M.l-M.r}" height="${Y(FALL[1])-Y(FALL[0])}" fill="${C.bandF}"/>`);
+    o.push(`<text class="seaslab" x="${W-M.r+8}" y="${Y(95)}">SPRING</text>`);
+    o.push(`<text class="seaslab" x="${W-M.r+8}" y="${Y(285)}">FALL</text>`);}
+  if(on("l-grid"))MONTH.forEach((d,i)=>{
+    o.push(`<line x1="${M.l}" y1="${Y(d)}" x2="${W-M.r}" y2="${Y(d)}" stroke="${C.grid}"/>`);
+    o.push(`<text class="tick" x="${M.l-9}" y="${Y(d)+4}" text-anchor="end">${MN[i]}</text>`);});
+  if(on("l-marks"))[SPRING[0],FALL[0]].forEach((d,k)=>
+    o.push(`<line x1="${M.l}" y1="${Y(d)}" x2="${W-M.r}" y2="${Y(d)}" stroke="${C.mk}" ${k?'stroke-dasharray="4 3" stroke-opacity=".45"':'stroke-opacity=".65"'}/>`));
+  const B={}; sel.idx.forEach(i=>{const s=DOY[i]<=SPRING[1]?"S":"F";(B[YR[i]+s]=B[YR[i]+s]||[]).push(i);});
+  let maxn=1; Object.values(B).forEach(v=>{if(v.length>maxn)maxn=v.length;});
+  const meds={S:[],F:[]};
+  YS.forEach(y=>["S","F"].forEach(s=>{
+    const arr=B[y+s]; if(!arr||!arr.length)return;
+    const v=arr.map(i=>DOY[i]), sorted=v.slice().sort((a,b)=>a-b), rng=s==="S"?SPRING:FALL;
+    meds[s].push({y,me:quant(sorted,.5)});
+    if(on("l-violin")&&v.length>=3){
+      const {xs,ys}=kde(v,rng[0],rng[1],0.6,96), mxy=Math.max(...ys)||1;
+      const scale=(vs==="w"?1:(v.length/maxn))*slot*0.45;
+      const L=xs.map((d,i)=>`${(X(y)-ys[i]/mxy*scale).toFixed(1)},${Y(d).toFixed(1)}`);
+      const R=xs.map((d,i)=>`${(X(y)+ys[i]/mxy*scale).toFixed(1)},${Y(d).toFixed(1)}`).reverse();
+      o.push(`<polygon points="${L.concat(R).join(" ")}" fill="${C.vf}" stroke="${C.vst}"/>`);}
+    if(on("l-box")){
+      const q1=quant(sorted,.25),me=quant(sorted,.5),q3=quant(sorted,.75),iqr=q3-q1;
+      const lo=sorted.find(d=>d>=q1-1.5*iqr),hi=[...sorted].reverse().find(d=>d<=q3+1.5*iqr);
+      const hw=slot*bw/2,x=X(y);
+      o.push(`<line x1="${x}" y1="${Y(lo)}" x2="${x}" y2="${Y(hi)}" stroke="${C.bs}"/>`);
+      o.push(`<rect x="${x-hw}" y="${Y(q1)}" width="${hw*2}" height="${Math.max(Y(q3)-Y(q1),1).toFixed(1)}" fill="${C.bf}" stroke="${C.bs}"/>`);
+      o.push(`<line x1="${x-hw}" y1="${Y(me)}" x2="${x+hw}" y2="${Y(me)}" stroke="${C.bs}" stroke-width="2.3"/>`);}}));
+  if(on("l-points"))sel.idx.forEach(i=>
+    o.push(`<circle cx="${(X(YR[i])+JX[i]*slot).toFixed(1)}" cy="${Y(DOY[i]+JY[i]).toFixed(1)}" r="${ps}" fill="${C.pt}" fill-opacity="${C.pa}"/>`));
+  if(on("l-median"))["S","F"].forEach(s=>{
+    const m=meds[s].sort((a,b)=>a.y-b.y); if(m.length<2)return;
+    o.push(`<polyline points="${m.map(v=>`${X(v.y)},${Y(v.me)}`).join(" ")}" fill="none" stroke="${C.bs}" stroke-width="2" stroke-dasharray="5 3"/>`);
+    m.forEach(v=>o.push(`<circle cx="${X(v.y)}" cy="${Y(v.me)}" r="3" fill="${C.bs}"/>`));});
+  YS.forEach(y=>o.push(`<text class="tick" x="${X(y)}" y="${H-M.b+19}" text-anchor="middle">${y}</text>`));
+  o.push(`<line x1="${M.l}" y1="${H-M.b}" x2="${W-M.r}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  o.push(`<line x1="${M.l}" y1="${M.t}" x2="${M.l}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  document.getElementById("plot").innerHTML=o.join("");
+  return meds;}
+
+function dstr(d){if(!isFinite(d))return"-";d=Math.round(d);let i=0;
+  for(let k=MONTH.length-1;k>=0;k--)if(d>=MONTH[k]){i=k;break}return MN[i]+" "+(d-MONTH[i]+1);}
+
+function draw(){
+  const sel=pick(); drawHist(sel); const meds=drawPlot(sel);
+  const act=sel.idx.filter(i=>DATA.status.idx[i]===ACTIVE_K);
+  let sp=0,fa=0; act.forEach(i=>{DOY[i]<=SPRING[1]?sp++:fa++;});
+  const avg=a=>a.length?dstr(a.reduce((x,v)=>x+v.me,0)/a.length):"-";
+  const span=act.length?(Math.max(...act.map(i=>T[i]))-Math.min(...act.map(i=>T[i]))+1):0;
+  const cards=[["Calves, active",act.length,`${sel.lo}-${sel.hi} (${sel.idx.length.toLocaleString()} incl. sold/dead)`],
+    ["Spring, active",sp,`median ${meds?avg(meds.S):"-"}`],
+    ["Fall, active",fa,`median ${meds?avg(meds.F):"-"}`],
+    ["Days with a birth",new Set(act.map(i=>T[i])).size,
+      span?`of ${span.toLocaleString()} days, first to last calf`:"active animals only"]];
+  document.getElementById("stats").innerHTML=cards.map(c=>
+    `<div class="stat"><div class="k">${esc(c[0])}</div><div class="v">${typeof c[1]==="number"?c[1].toLocaleString():esc(c[1])}</div><div class="n">${esc(c[2])}</div></div>`).join("");
+  const f=FILTERS[+document.getElementById("filt").value];
+  document.getElementById("filt-n").textContent=f.n.toLocaleString()+" calves ("+(100*f.n/N).toFixed(1)+"%)";
+  const w=document.getElementById("warn");
+  if(f.test&&f.n/N<0.5){w.hidden=false;
+    w.textContent=`This subset covers ${(100*f.n/N).toFixed(1)}% of calves. Group and category membership is a current snapshot in CattleMax and is not kept over time, so it under-covers older calves. Read these shapes as indicative, not complete.`;}
+  else w.hidden=true;
+  document.getElementById("note").textContent=
+    `Equal width makes every violin the same maximum width so shapes compare across years regardless of how many calves fell in that season; scaled by count sizes them by group size. The Jan 1 / Jul 1 split is a working boundary for separating the two calving blocks, not a definition supplied by the ranch.`;}
+
+/* ================= SECTION 2 ================= */
+function drawExpo(){
+  const W=1240,H=430,M={t:26,r:24,b:64,l:58};
+  const C={bar:cssv("--violin-fill"),deep:cssv("--ui"),alert:cssv("--alert"),axis:cssv("--axis"),
+           grid:cssv("--grid"),ink:cssv("--ink-3")};
+  const co=EXPO.cohorts, mx=Math.max(...co.map(c=>c.cpe),1.2);
+  const bwid=(W-M.l-M.r)/co.length;
+  const X=i=>M.l+bwid*(i+0.5), Y=v=>H-M.b-(v/mx)*(H-M.t-M.b);
+  let o=[];
+  [0,0.25,0.5,0.75,1.0].forEach(v=>{ if(v>mx)return;
+    o.push(`<line x1="${M.l}" y1="${Y(v)}" x2="${W-M.r}" y2="${Y(v)}" stroke="${C.grid}"/>`);
+    o.push(`<text class="tick" x="${M.l-8}" y="${Y(v)+4}" text-anchor="end">${v.toFixed(2)}</text>`);});
+  co.forEach((c,i)=>{
+    const x=X(i)-bwid*0.34, w=bwid*0.68, y=Y(c.cpe);
+    if(c.incomplete)
+      o.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${(H-M.b-y).toFixed(1)}" fill="none" stroke="${C.alert}" stroke-width="1.5" stroke-dasharray="4 3"/>`);
+    else
+      o.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${(H-M.b-y).toFixed(1)}" fill="${c.type==="Fall"?C.deep:C.bar}"/>`);
+    o.push(`<text class="tick" x="${X(i)}" y="${y-6}" text-anchor="middle">${c.cpe.toFixed(2)}</text>`);
+    o.push(`<text class="tick" x="${X(i)}" y="${H-M.b+16}" text-anchor="middle">${c.year}</text>`);
+    o.push(`<text class="tick" x="${X(i)}" y="${H-M.b+30}" text-anchor="middle">${c.type}</text>`);
+    o.push(`<text class="tick" x="${X(i)}" y="${H-M.b+45}" text-anchor="middle" fill="${C.ink}">n=${c.exposed}</text>`);});
+  o.push(`<line x1="${M.l}" y1="${H-M.b}" x2="${W-M.r}" y2="${H-M.b}" stroke="${C.axis}"/>`);
+  o.push(`<text class="tick" x="${M.l}" y="${M.t-8}">calves born per female exposed</text>`);
+  document.getElementById("xchart").innerHTML=o.join("");
+
+  const done=co.filter(c=>!c.incomplete);
+  const avg=done.reduce((a,c)=>a+c.cpe,0)/Math.max(done.length,1);
+  const last=done[done.length-1];
+  const cards=[
+    ["Cow-seasons",EXPO.totalSeasons,`${EXPO.analysisReady.toLocaleString()} analysis-ready`],
+    ["Median calving interval",EXPO.medianInterval+" d","analysis-ready seasons only"],
+    ["Calves / exposed",avg.toFixed(2),`mean of ${done.length} complete seasons`],
+    ["Most recent complete",last?last.cpe.toFixed(2):"-",last?last.cohort:"-"]];
+  document.getElementById("xstats").innerHTML=cards.map(c=>
+    `<div class="stat"><div class="k">${esc(c[0])}</div><div class="v">${typeof c[1]==="number"?c[1].toLocaleString():esc(c[1])}</div><div class="n">${esc(c[2])}</div></div>`).join("");
+
+  const inc=co.filter(c=>c.incomplete).map(c=>c.cohort);
+  document.getElementById("xwarn").innerHTML=
+    `<b>Read the dashed bars with care.</b> ${inc.length?esc(inc.join(" and ")):"None"} ${inc.length===1?"is":"are"} still incomplete: calves conceived in ${inc.length===1?"that season":"those seasons"} are not all due until after the ${esc(EXPO.pull)} pull, so ${inc.length===1?"its":"their"} rate will rise. `+
+    `Seasons opening before the record horizon (${esc(EXPO.horizon)}) may also be missing earlier services.`;
+
+  const rows=co.map(c=>`<tr class="${c.incomplete?"incomplete":""}">
+    <td>${esc(c.cohort)}${c.incomplete?' <span class="pill">incomplete</span>':""}</td>
+    <td>${c.exposed}</td><td>${c.services}</td><td>${c.spe.toFixed(2)}</td>
+    <td>${c.calved}</td><td>${c.pctCalved.toFixed(1)}%</td>
+    <td>${c.calves}</td><td><b>${c.cpe.toFixed(3)}</b></td></tr>`).join("");
+  document.getElementById("xtable").innerHTML=
+    `<thead><tr><th>Breeding season</th><th>Exposed</th><th>Services</th><th>Serv/head</th>
+     <th>Calved</th><th>% calved</th><th>Calves</th><th>Calves/exposed</th></tr></thead><tbody>${rows}</tbody>`;
+  document.getElementById("xnote").textContent=
+    `Exposed counts distinct cow-seasons with a service recorded in that breeding season; a season ends when a calf is born. Calves are counted from the cow-season that the service opened, so twins count twice and an unrecorded calving counts as a failure to calve.`;}
+
+/* ---- tabs ---- */
+document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll('nav.tabs button').forEach(x=>{
+    const on=x===b; x.setAttribute("aria-selected",on?"true":"false");
+    document.getElementById(x.getAttribute("aria-controls")).hidden=!on;});
+  if(b.id==="tab-expo")drawExpo(); else draw();}));
+
+/* ---- wire up ---- */
+const fs=document.getElementById("filt");
+FILTERS.forEach((f,i)=>fs.add(new Option(`${f.label}  (${f.n})`,i)));
+const y0s=document.getElementById("y0"),y1s=document.getElementById("y1");
+DATA.years.forEach(y=>{y0s.add(new Option(y,y));y1s.add(new Option(y,y))});
+y0s.value=DATA.years[0]; y1s.value=DATA.years[DATA.years.length-1];
+document.getElementById("s-pull").textContent=DATA.pull;
+document.getElementById("s-date").textContent=DATA.pulled;
+document.getElementById("s-src").textContent=DATA.source;
+document.getElementById("s-hz").textContent=EXPO.horizon;
+document.querySelectorAll("input,select").forEach(el=>el.addEventListener("input",()=>{
+  document.getElementById("bw-v").textContent=(+document.getElementById("bw").value).toFixed(2);
+  document.getElementById("ps-v").textContent=(+document.getElementById("ps").value).toFixed(1);
+  const b=+document.getElementById("bin").value;
+  document.getElementById("bin-v").textContent=b===1?"1 day":b+" days";
+  draw();}));
+
+const histSvg=document.getElementById("hist"); let dragX0=null;
+const toSvgX=e=>{const r=histSvg.getBoundingClientRect();return (e.clientX-r.left)/r.width*HIST.W;};
+const xToT=x=>{const {M,W,t0,t1}=HIST;const f=(x-M.l)/(W-M.l-M.r);
+  return t0+Math.max(0,Math.min(1,f))*(t1-t0);};
+function band(x0,x1){document.getElementById("hist-band")?.remove();
+  const r=document.createElementNS("http://www.w3.org/2000/svg","rect");
+  r.setAttribute("id","hist-band");r.setAttribute("x",Math.min(x0,x1));r.setAttribute("y",HIST.M.t);
+  r.setAttribute("width",Math.abs(x1-x0));r.setAttribute("height",HIST.H-HIST.M.t-HIST.M.b);
+  r.setAttribute("fill",cssv("--ui"));r.setAttribute("fill-opacity",".2");histSvg.appendChild(r);}
+histSvg.addEventListener("pointerdown",e=>{if(HIST.t0===undefined)return;
+  dragX0=toSvgX(e);histSvg.setPointerCapture(e.pointerId);e.preventDefault();});
+histSvg.addEventListener("pointermove",e=>{if(dragX0===null)return;band(dragX0,toSvgX(e));});
+histSvg.addEventListener("pointerup",e=>{if(dragX0===null)return;
+  const x1=toSvgX(e),a=xToT(Math.min(dragX0,x1)),b=xToT(Math.max(dragX0,x1));
+  dragX0=null;document.getElementById("hist-band")?.remove();
+  if(Math.abs(b-a)>=2){ZOOM=[Math.floor(a),Math.ceil(b)];draw();}});
+histSvg.addEventListener("pointercancel",()=>{dragX0=null;document.getElementById("hist-band")?.remove();});
+histSvg.addEventListener("dblclick",()=>{ZOOM=null;draw();});
+document.getElementById("zoom-reset").addEventListener("click",()=>{ZOOM=null;draw();});
+matchMedia("(prefers-color-scheme:dark)").addEventListener("change",()=>{draw();
+  if(!document.getElementById("sec-expo").hidden)drawExpo();});
+draw();
+</script>
+</body>
+</html>
