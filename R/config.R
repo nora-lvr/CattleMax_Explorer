@@ -58,7 +58,11 @@ cm_herd <- function(pull, root = cm_root()) {
                    display_name = gsub("_", " ", sub("^[0-9]+_(.+)_[0-9]{12}$", "\\1", pull)),
                    brand_hex = "#3a3634", brand_deep_hex = "#1d1d1d")
   if (!file.exists(f)) return(fallback)
-  h <- utils::read.csv(f, stringsAsFactors = FALSE, colClasses = "character")
+  ## character throughout; an account id is an identifier, never a number
+  h <- as.data.frame(readr::read_csv(f,
+         col_types = readr::cols(.default = readr::col_character()),
+         na = c(""), progress = FALSE, show_col_types = FALSE),
+       stringsAsFactors = FALSE)
   row <- h[h$account_id == acct, , drop = FALSE]
   if (!nrow(row)) return(fallback)
   as.list(row[1, ])

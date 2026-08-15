@@ -38,8 +38,9 @@ dir.create(dirname(BASE), showWarnings = FALSE, recursive = TRUE)
 ## keeps this step near-instant even on a large pull.
 files <- sort(list.files(cfg$pull_dir, pattern = "\\.csv$"))
 now <- lapply(files, function(f) {
-  h <- tryCatch(names(utils::read.csv(file.path(cfg$pull_dir, f), nrows = 0,
-                                      check.names = FALSE)),
+  h <- tryCatch(names(readr::read_csv(file.path(cfg$pull_dir, f), n_max = 0,
+                                      name_repair = "minimal", progress = FALSE,
+                                      show_col_types = FALSE)),
                 error = function(e) character(0))
   list(file = f, cols = h)
 })

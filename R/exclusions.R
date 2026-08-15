@@ -49,13 +49,21 @@ excl_write <- function(silver_dir, stamp = Sys.Date()) {
   ## accumulate across build scripts rather than overwrite
   ## read via the CSV twin, not the parquet: arrow memory-maps on read and
   ## Windows then refuses to overwrite the file it still has mapped.
+  ## read as character and convert deliberately - a `detail` that happens to
+  ## look numeric, or a reason whose text is "NA", must survive the round trip
   fc_old <- file.path(silver_dir, "exclusions.csv")
   if (file.exists(fc_old)) {
-    old <- utils::read.csv(fc_old, stringsAsFactors = FALSE)
+    old <- as.data.frame(readr::read_csv(fc_old,
+             col_types = readr::cols(.default = readr::col_character()),
+             na = c(""), progress = FALSE, show_col_types = FALSE),
+           stringsAsFactors = FALSE)
     if (nrow(old)) {
       old <- old[!(old$table %in% unique(X$table)), , drop = FALSE]  # replace this table's rows
       if (nrow(old)) {
-        old$recorded <- as.Date(old$recorded)
+        old$recorded    <- as.Date(old$recorded)
+        old$n_records   <- as.numeric(old$n_records)
+        old$n_animals   <- as.numeric(old$n_animals)
+        old$recoverable <- as.logical(old$recoverable)
         X <- rbind(old[, names(X)], X)
       }
     }

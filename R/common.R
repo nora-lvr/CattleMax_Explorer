@@ -4,12 +4,27 @@
 
 ## Read a CattleMax CSV with a real quoted parser. Golden rule 5: free-text
 ## fields contain commas and embedded newlines, so naive splitting corrupts
-## rows (animals.csv has 17,055 lines but 17,052 records).
+## rows (animals.csv has 17,054 lines but 17,052 records; pregnancy_checks has
+## 861 more lines than records).
+##
+## readr, not read.csv (Nora, 2026-08-15: "use tidyverse when possible, it is
+## safest"). Two rules that matter more than the choice of parser:
+##
+##   EVERY COLUMN AS CHARACTER. Nothing is type-guessed. A column of ear tags
+##   that happens to look numeric stays text; dates and numbers are converted
+##   deliberately, downstream, where the conversion can be checked.
+##
+##   ONLY "" IS MISSING - never the text "NA". sale_tickets.csv carries an
+##   invoice whose literal value is "NA"; treating that string as missing would
+##   delete a real value. Whatever the client typed, we read.
 cm_read <- function(cfg, file) {
   p <- file.path(cfg$pull_dir, file)
   if (!file.exists(p)) stop("missing export file: ", p)
-  utils::read.csv(p, stringsAsFactors = FALSE, colClasses = "character",
-                  na.strings = c("", "NA"))
+  as.data.frame(
+    readr::read_csv(p, col_types = readr::cols(.default = readr::col_character()),
+                    na = c(""), progress = FALSE, show_col_types = FALSE,
+                    name_repair = "minimal"),
+    stringsAsFactors = FALSE)
 }
 
 ## CattleMax timestamps are "YYYY-MM-DD HH:MM:SS -0600"; take the date part.

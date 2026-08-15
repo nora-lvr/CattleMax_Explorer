@@ -30,7 +30,8 @@ steps <- c(
   "build_disease.R",     # one row per disease case, with its outcome
   "build_cow_scorecard.R",   # one row per calving on the outcome ladder, one per cow
   "export_disease_review.R", # the editable disease grouping sheet
-  "export_lineage.R"     # the data-flow document's live counts
+  "export_lineage.R",    # the data-flow document's live counts
+  "test_no_invention.R"  # FINAL GATE: nothing manufactured ships without approval
 )
 
 ## The step scripts run in the global environment and freely use short names
