@@ -7,7 +7,7 @@
 ##
 ## Usage in a build script:
 ##   source(".../exclusions.R"); excl_reset()
-##   excl_add("cows.parquet", "no known carrier dam",
+##   excl_add("cow_lactations.parquet", "no known carrier dam",
 ##            n_records = 485, n_animals = 485,
 ##            detail = "calf has no dam_animal_id and no recoverable recipient")
 ##   excl_write(SILVER)          # writes exclusions.parquet + .csv, prints a summary

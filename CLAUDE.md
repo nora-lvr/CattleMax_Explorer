@@ -17,7 +17,7 @@ the R scripts are the sandbox that pinned down the rules — see [R/README.md](R
 ## What exists
 - `R/build_animals.R` → `data/silver-data/animals.parquet` — one row per animal, every event date,
   phase boundaries as dates, entry/exit each with a `_rule` column, six `flag_*` columns.
-- `R/build_cows.R` → `data/silver-data/cows.parquet` — one row per **cow-season** (a season ends at
+- `R/build_cows.R` → `data/silver-data/cow_lactations.parquet` — one row per **cow-season** (a season ends at
   each calving), with censoring flags and a single `analysis_ready` column.
 - `R/export_*_json.R` + `reports/templates/herd_report.html` → a self-contained, emailable report.
 

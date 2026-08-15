@@ -1,5 +1,5 @@
 ## ---------------------------------------------------------------
-## cows.parquet : one row per COW-SEASON.
+## cow_lactations.parquet : one row per COW-SEASON.
 ## A season ENDS each time a calf is born; the next season starts there.
 ## Season 1 starts when she enters the breeding herd (first service, else entry).
 ## The final season is left OPEN (still running) or closed by her exit.
@@ -72,11 +72,11 @@ cat("ET calves re-attributed away from the dam field:",
     sum(!is.na(recip) & !is.na(aAll$dam_animal_id) & recip != aAll$dam_animal_id), "\n\n")
 
 source(file.path(cfg$root,"R","exclusions.R")); excl_reset()
-excl_add("cows.parquet", "calf: dam field names the ET donor, no recipient recoverable",
+excl_add("cow_lactations.parquet", "calf: dam field names the ET donor, no recipient recoverable",
          sum(nonref_calf & is.na(dam_use) & dam_is_donor),
          detail="dam_animal_id == genetic_dam_animal_id; crediting it would credit the donor",
          recoverable=TRUE)
-excl_add("cows.parquet", "calf: no dam link of any kind",
+excl_add("cow_lactations.parquet", "calf: no dam link of any kind",
          sum(nonref_calf & is.na(dam_use) & !dam_is_donor),
          detail="no dam_animal_id and no breeding_id; carrier unknown", recoverable=FALSE)
 calves <- data.frame(calf_id = aAll$id,
@@ -315,20 +315,20 @@ CS$calf_crop <- ifelse(is.na(CS$breeding_type), NA, paste0(CS$crop_type, " ", CS
 
 ## ---- record everything that did not make it into this table ----
 fem_all <- M[M$sex %in% "Heifer", ]
-excl_add("cows.parquet", "female: never calved and never exposed",
+excl_add("cow_lactations.parquet", "female: never calved and never exposed",
          nrow(fem_all) - nrow(fem),
          n_animals = nrow(fem_all) - nrow(fem),
          detail="no calving event and no breeding record, so she has no season",
          recoverable=TRUE)
-excl_add("cows.parquet", "animal: not sex == Heifer",
+excl_add("cow_lactations.parquet", "animal: not sex == Heifer",
          sum(!(M$sex %in% "Heifer")), n_animals = sum(!(M$sex %in% "Heifer")),
          detail="bulls, steers and 24 animals with no sex; there is no bull-side table yet",
          recoverable=TRUE)
-excl_add("cows.parquet", "season: zero length (start == end)", n_zero_len,
+excl_add("cow_lactations.parquet", "season: zero length (start == end)", n_zero_len,
          detail="carries no information; 2 of them were flagged as calvings", recoverable=FALSE)
 excl_write(cfg$silver)
 
-cm_write_silver(CS, cfg, "cows")
+cm_write_silver(CS, cfg, "cow_lactations")
 cat(" cows:", length(unique(CS$animal_id)), "\n\n")
 
 cat("=== outcome ===\n");       print(table(CS$outcome))

@@ -209,11 +209,11 @@ Current ledger for River Creek — 15,658 records excluded in total:
 | table | reason | records | recoverable |
 |---|---|---|---|
 | animals.parquet | `status == Reference` | 12,182 | no |
-| cows.parquet | animal is not `sex == Heifer` (no bull-side table yet) | 1,896 | **yes** |
-| cows.parquet | female never calved and never exposed | 979 | **yes** |
-| cows.parquet | calf has no dam link of any kind | 485 | no |
-| cows.parquet | season of zero length | 85 | no |
-| cows.parquet | calf's dam field names the ET donor, no recipient recoverable | 31 | **yes** |
+| cow_lactations.parquet | animal is not `sex == Heifer` (no bull-side table yet) | 1,896 | **yes** |
+| cow_lactations.parquet | female never calved and never exposed | 979 | **yes** |
+| cow_lactations.parquet | calf has no dam link of any kind | 485 | no |
+| cow_lactations.parquet | season of zero length | 85 | no |
+| cow_lactations.parquet | calf's dam field names the ET donor, no recipient recoverable | 31 | **yes** |
 
 The `recoverable = yes` rows are the ones worth revisiting: 2,906 records are out purely because of
 a rule we chose, not because the data is missing.
@@ -258,7 +258,7 @@ lived — that affected 234 animals with a median age at death of 34 days.
   purchase of 314 commercial recipients look barren and understated that breeding season from
   **76.5% calved to 44.7%**.
 
-### `cows.parquet` — the cow-season table
+### `cow_lactations.parquet` — the cow-season table
 One row per **cow-season**. A season **ends each time a calf is born**; the next season starts there.
 Season 1 opens at **first bull exposure** (falls back to entry when there is no breeding record).
 The final season is left open, or closed by her exit. Calvings within 7 days collapse into one

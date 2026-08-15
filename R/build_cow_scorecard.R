@@ -48,7 +48,7 @@ if (!exists("MIN_FINAL"))     MIN_FINAL     <- if (length(.args)>=2) .args[2] el
 ## still carries the only complete calving record we will ever have of her, and
 ## dropping her here would delete the herd's history. (Nora, 2026-08-15.)
 ##
-## LONG_INTERVAL_DAYS: a cow-season in cows.parquet ends AT a calving, so a cow
+## LONG_INTERVAL_DAYS: a cow-season in cow_lactations.parquet ends AT a calving, so a cow
 ## that skips a year does NOT produce a "missed" season - she produces one long
 ## one. Verified on this pull: all 763 non-calving seasons are the cow's LAST
 ## season and none are mid-career, so "no calf" means SHE LEFT OPEN and nothing
@@ -63,7 +63,7 @@ cat("long interval   :", LONG_INTERVAL_DAYS, "days - a season at or over this is
 cat("scored          : every cow with enough history; filtering to active cows is the report's job\n\n")
 
 A <- cm_read_silver(cfg, "animals")
-K <- cm_read_silver(cfg, "cows")
+K <- cm_read_silver(cfg, "cow_lactations")
 
 ## ---- every calving, placed on the ladder ---------------------------------
 CV <- K[K$calved & !is.na(K$calf_id), ]

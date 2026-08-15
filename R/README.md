@@ -17,10 +17,10 @@ data/silver-data/animals.parquet
         |
         |  R/build_cows.R         one row per COW-SEASON (season ends at each calving)
         v
-data/silver-data/cows.parquet
+data/silver-data/cow_lactations.parquet
         |
         |  R/export_calving_json.R    -> calving JSON  (reads animals.parquet)
-        |  R/export_exposure_json.R   -> exposure JSON (reads cows.parquet)
+        |  R/export_exposure_json.R   -> exposure JSON (reads cow_lactations.parquet)
         v
 reports/templates/herd_report.html + the two JSON payloads
         v

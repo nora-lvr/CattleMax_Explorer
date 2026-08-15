@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CattleMax Source Map</title>
+<!--__STYLE__-->
+<style>
+.mapwrap{background:var(--panel);border:1px solid var(--rule);padding:6px;overflow:auto}
+#map{display:block;width:auto;max-width:none;height:auto}
+.zoombar{display:flex;gap:10px;align-items:center;margin:8px 0 2px;font-size:12.5px;color:var(--ink-3)}
+.zoombar button{font:inherit;padding:3px 10px;border:1px solid var(--rule);background:var(--panel);
+  color:var(--ink-2);border-radius:2px;cursor:pointer}
+.zoombar button:hover{border-color:var(--alert);color:var(--alert)}
+.tnode{cursor:pointer}
+.tnode:hover rect{stroke:var(--alert);stroke-width:2}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin:10px 0 4px;font-size:12.5px;color:var(--ink-2)}
+.sw{display:inline-block;width:13px;height:13px;vertical-align:-2px;margin-right:5px;border:1px solid var(--rule)}
+.sw-used{background:var(--ui)} .sw-idle{background:var(--bar-2)} .sw-empty{background:var(--panel)}
+.tools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:12px 0 8px;font-size:13px}
+.tools input,.tools select{font:inherit;padding:5px 8px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--ink);border-radius:2px}
+.tools input{min-width:200px}
+details.tbl{border:1px solid var(--rule);background:var(--panel);margin-bottom:5px}
+details.tbl>summary{cursor:pointer;padding:8px 13px;list-style:none;display:flex;
+  gap:12px;align-items:baseline;flex-wrap:wrap;font-size:13.5px}
+details.tbl>summary::-webkit-details-marker{display:none}
+details.tbl>summary::before{content:"\25B8";color:var(--ink-3);font-size:11px}
+details.tbl[open]>summary::before{content:"\25BE"}
+details.tbl.idle>summary{color:var(--ink-3)}
+.tname{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700}
+.tmeta{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-3);margin-left:auto}
+.badge{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:1px 6px;border-radius:2px;white-space:nowrap}
+.b-used{background:var(--ui);color:var(--panel)}
+.b-idle{border:1px solid var(--alert);color:var(--alert)}
+.b-empty{border:1px solid var(--rule);color:var(--ink-3)}
+td.fillcell{position:relative;min-width:110px}
+td.fillcell .fb{position:absolute;left:9px;top:50%;transform:translateY(-50%);height:11px;background:var(--bar-2)}
+td.fillcell span{position:relative}
+.dim{color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brandline">
+    <p class="wordmark">LVR</p>
+    <span class="doctype">Source Map</span>
+    <span class="herdname" id="s-herd"></span>
+  </div>
+  <h1>What CattleMax actually gives us</h1>
+  <p class="sub">Every file in the export, how many rows it holds, how the files join to one another,
+  and which ones the pipeline reads today. Scanned from the pull itself &mdash; joins are only drawn
+  where the values really match, so no relationship here is inferred from a column name alone.</p>
+  <div class="stamp">
+    <span>pull <b id="s-pull"></b></span><span>pulled <b id="s-date"></b></span>
+    <span>files <b id="s-files"></b></span><span>joins <b id="s-joins"></b></span>
+    <span>scanned <b id="s-gen"></b></span>
+  </div>
+</header>
+
+<h2>The shape of the export</h2>
+<p class="lede"><code>animals</code> is the spine &mdash; almost everything hangs off
+<code>animal_id</code>. The two orbits are join distance: the inner ring joins to animals directly,
+the outer ring only through another file. Box width follows row count.</p>
+<div class="legend">
+  <span><i class="sw sw-used"></i>read by the pipeline</span>
+  <span><i class="sw sw-idle"></i>has data, <b>not read</b></span>
+  <span><i class="sw sw-empty"></i>empty in this pull</span>
+  <span class="dim">click any box to jump to its columns</span>
+</div>
+<div class="zoombar"><button onclick="__zoom(1)">100%</button>
+  <button onclick="__fit()">fit to width</button>
+  <button onclick="__zoom(1.4)">zoom in</button>
+  <button onclick="__png()">save as image</button>
+  <span>the frame scrolls &mdash; the map is drawn at true size so the labels stay readable</span></div>
+<div class="mapwrap"><svg id="map" role="img" aria-label="CattleMax table relationships"></svg></div>
+<p class="note" id="map-note"></p>
+
+<h2>What we are not using</h2>
+<div class="warn" id="idle"></div>
+
+<h2>Every file, every column</h2>
+<p class="lede">Fill rate is the share of rows where the column has a value. A column at a low fill
+rate is not necessarily bad &mdash; it may only apply to some animals &mdash; but it is never safe to
+build a denominator on one without saying so.</p>
+<div class="tools">
+  <input id="q" type="search" placeholder="table or column name" aria-label="search">
+  <select id="f"><option value="">every file</option>
+    <option value="used">read by the pipeline</option>
+    <option value="idle">has data, not read</option>
+    <option value="empty">empty</option></select>
+  <span class="count" id="count" style="color:var(--ink-3);font-size:12px"></span>
+</div>
+<div id="tables"></div>
+</div>
+
+<script>
+const D = /*__DATA__*/;
+const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const n=v=>(v==null?"":v.toLocaleString());
+document.getElementById("s-herd").textContent=D.herd;
+document.getElementById("s-pull").textContent=D.pull;
+document.getElementById("s-date").textContent=D.pulled;
+document.getElementById("s-files").textContent=D.nFiles;
+document.getElementById("s-joins").textContent=D.edges.length;
+document.getElementById("s-gen").textContent=D.generated;
+
+const T={}; D.tables.forEach(t=>T[t.name]=t);
+const kind=t=>t.rows===0?"empty":(t.used?"used":"idle");
+
+/* ---------- ring layout by join distance from `animals` ---------- */
+(function(){
+  const C={used:cssv("--ui"),idle:cssv("--bar-2"),empty:cssv("--panel"),
+    ink:cssv("--ink"),panel:cssv("--panel"),line:cssv("--ui-2"),
+    alert:cssv("--alert"),lab:cssv("--ink-3"),rule:cssv("--rule")};
+  /* undirected adjacency, so distance means "can be joined to", not "points at" */
+  const adj={}; D.tables.forEach(t=>adj[t.name]=new Set());
+  D.edges.forEach(e=>{adj[e.from]&&adj[e.from].add(e.to); adj[e.to]&&adj[e.to].add(e.from);});
+  const dist={animals:0}; let front=["animals"];
+  while(front.length){ const next=[];
+    front.forEach(a=>adj[a].forEach(b=>{ if(dist[b]===undefined){dist[b]=dist[a]+1; next.push(b);} }));
+    front=next; }
+  /* anything the scan could not link sits in its own outer ring, named as such */
+  const rings={0:[],1:[],2:[],3:[]};
+  D.tables.forEach(t=>{ const d=dist[t.name]; rings[d===undefined?3:Math.min(d,3)].push(t); });
+  [1,2,3].forEach(r=>rings[r].sort((a,b)=>b.rows-a.rows));
+
+  /* RADIAL, at natural size. The circle shows the shape of the export - one
+     spine with everything hanging off it - which a column layout hides. It is
+     only unreadable if the svg is stretched to page width, so it is rendered at
+     true pixel size inside a scrolling frame with a zoom control instead. */
+  const shelf=rings[3]; rings[3]=[];
+  const BH=34, GAP=18;
+  const wOf=t=>Math.max(108, Math.min(176, 108+Math.log10(1+t.rows)*17));
+  /* each ring gets the circumference its contents need, so boxes never collide */
+  const radius=a=>Math.max(250, (a.length*(176+GAP))/(2*Math.PI));
+  const R={1:radius(rings[1])};
+  R[2]=Math.max(R[1]+210, radius(rings[2]));
+  const outer=R[2]+110;
+  /* ---- ORDER THE RINGS TO SHORTEN EDGES AND CUT CROSSINGS ----
+     Minimising crossings exactly is NP-hard, so this is the standard barycentre
+     heuristic: repeatedly move each file to the average ANGLE of the files it
+     joins to, then re-space the ring evenly so boxes still cannot collide.
+     Shelf files are pinned to the top of the circle during the sweep, which
+     drags their one partner (contacts) up to meet them instead of leaving a
+     long line across the whole diagram. */
+  const nb={}; D.tables.forEach(t=>nb[t.name]=[]);
+  D.edges.forEach(e=>{ if(nb[e.from]&&nb[e.to]){nb[e.from].push(e.to); nb[e.to].push(e.from);} });
+  const TOP=-Math.PI/2;
+  const ang={};                       // current angle of every node
+  const setAngles=()=>{ ang["animals"]=0;
+    [1,2].forEach(r=>{ const step=(2*Math.PI)/Math.max(rings[r].length,1);
+      rings[r].forEach((t,i)=>{ang[t.name]=TOP+i*step;}); });
+    shelf.forEach(t=>{ang[t.name]=TOP;}); };
+  setAngles();
+  const circMean=as=>{ let x=0,y=0; as.forEach(a=>{x+=Math.cos(a); y+=Math.sin(a);});
+    return (x===0&&y===0)?null:Math.atan2(y,x); };
+  const norm=a=>{ let v=(a-TOP)%(2*Math.PI); return v<0?v+2*Math.PI:v; };
+  for (let pass=0; pass<60; pass++) {
+    [1,2].forEach(r=>{
+      const scored=rings[r].map((t,i)=>{
+        const ns=nb[t.name].filter(x=>ang[x]!==undefined && x!=="animals").map(x=>ang[x]);
+        const m=circMean(ns);
+        return {t, key: m===null ? norm(ang[t.name]) : norm(m), i};
+      });
+      /* ties keep their previous order, so the sweep converges instead of churning */
+      scored.sort((a,b)=>a.key-b.key || a.i-b.i);
+      rings[r]=scored.map(s=>s.t);
+    });
+    setAngles();
+  }
+  /* ---- then a hill climb, because barycentre alone leaves easy wins ----
+     Positions are a pure function of ring order, so we can score an order by the
+     total edge length it produces and keep any single move that shortens it.
+     Two move types: swap two files in a ring, or lift one out and reinsert it
+     elsewhere in the same ring. Stops when a full sweep finds no improvement. */
+  const RR={1:radius(rings[1])}; RR[2]=Math.max(RR[1]+210, radius(rings[2]));
+  const placeAt=(state)=>{ const P={animals:{x:0,y:0}};
+    [1,2].forEach(r=>{ const step=(2*Math.PI)/Math.max(state[r].length,1);
+      state[r].forEach((t,i)=>{ const a=TOP+i*step;
+        P[t.name]={x:RR[r]*Math.cos(a), y:RR[r]*Math.sin(a)}; }); });
+    /* shelf files sit above the circle; treat them as one point at the top so
+       their pull is felt without pretending we know their final column yet */
+    state.shelf.forEach(t=>{P[t.name]={x:0,y:-RR[2]-170};});
+    return P; };
+  const costOf=(state)=>{ const P=placeAt(state); let s=0;
+    D.edges.forEach(e=>{ const a=P[e.from], b=P[e.to]; if(a&&b) s+=Math.hypot(b.x-a.x,b.y-a.y); });
+    return s; };
+  const state={1:rings[1].slice(), 2:rings[2].slice(), shelf:shelf};
+  let best=costOf(state), moved=true, guard=0;
+  while(moved && guard++<40){ moved=false;
+    [1,2].forEach(r=>{ const a=state[r];
+      for(let i=0;i<a.length;i++){
+        for(let j=i+1;j<a.length;j++){
+          [a[i],a[j]]=[a[j],a[i]];
+          const c=costOf(state);
+          if(c<best-0.5){best=c; moved=true;} else {[a[i],a[j]]=[a[j],a[i]];}
+        }
+      }
+    });
+  }
+  rings[1]=state[1]; rings[2]=state[2];
+  setAngles();
+  const shelfCols=Math.max(1, Math.floor((outer*2)/(176+GAP)));
+  const shelfRows=Math.ceil(shelf.length/shelfCols);
+  const W=Math.max(outer*2+70, shelfCols*(176+GAP)+70);
+  /* the unjoined files sit ABOVE the circle: they are what you have to rule out
+     before the spine below means anything, so they are read first */
+  const shelfH=shelf.length?shelfRows*(BH+GAP)+72:0;
+  const cx=W/2, cy=shelfH+outer+46;
+  const H=cy+outer+30;
+  const pos={};
+  pos["animals"]={x:cx,y:cy,w:190,h:56};
+  /* ring 1 is evenly spaced around the spine */
+  { const a=rings[1], step=(2*Math.PI)/Math.max(a.length,1);
+    a.forEach((t,i)=>{ const g=TOP+i*step;
+      pos[t.name]={x:cx+R[1]*Math.cos(g), y:cy+R[1]*Math.sin(g), w:wOf(t), h:BH, ang:g}; }); }
+  /* ring 2 is NOT evenly spaced: each file is placed at the ANGLE OF ITS PARENT
+     so it sits directly outside the file it joins to, and pairs are only pushed
+     apart far enough to stop the boxes touching. Even spacing was the reason
+     pasture_notes ended up on the far side of the diagram from pastures. */
+  { const a=rings[2];
+    const want=a.map(t=>{
+      const ns=nb[t.name].map(x=>pos[x]&&pos[x].ang).filter(v=>v!==undefined);
+      const m=circMean(ns);
+      return {t, g: m===null ? TOP : m};
+    });
+    want.sort((x,y)=>norm(x.g)-norm(y.g));
+    /* minimum angular gap that keeps two boxes apart at this radius */
+    const minSep=(176+GAP)/R[2];
+    for (let pass=0; pass<200; pass++){
+      let ok=true;
+      for (let i=0;i<want.length;i++){
+        const j=(i+1)%want.length;
+        let gap=norm(want[j].g)-norm(want[i].g);
+        if (j===0) gap+=2*Math.PI;
+        if (gap<minSep-1e-9){
+          const push=(minSep-gap)/2;
+          want[i].g-=push; want[j].g+=push; ok=false;
+        }
+      }
+      if (ok) break;
+    }
+    want.forEach(w=>{ pos[w.t.name]={x:cx+R[2]*Math.cos(w.g), y:cy+R[2]*Math.sin(w.g),
+                                     w:wOf(w.t), h:BH, ang:w.g}; });
+    rings[2]=want.map(w=>w.t);
+  }
+  /* the shelf is ordered by where its partner ended up on the circle, so the
+     lines drop more or less straight down instead of fanning across */
+  const shelfKey=t=>{ const xs=nb[t.name].filter(x=>pos[x]).map(x=>pos[x].x);
+    return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : Infinity; };
+  const linked=shelf.filter(t=>nb[t.name].length), loose=shelf.filter(t=>!nb[t.name].length);
+  linked.sort((a,b)=>shelfKey(a)-shelfKey(b));
+  const ordered=linked.concat(loose);
+  ordered.forEach((t,i)=>{ const r=Math.floor(i/shelfCols), c=i%shelfCols;
+    pos[t.name]={x:35+(176+GAP)*c+88, y:56+r*(BH+GAP), w:wOf(t), h:BH}; });
+
+  let o=`<defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+    orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${C.alert}" fill-opacity=".55"/></marker></defs>`;
+  D.edges.forEach(e=>{ const a=pos[e.from], b=pos[e.to]; if(!a||!b) return;
+    o+=`<line x1="${a.x.toFixed(0)}" y1="${a.y.toFixed(0)}" x2="${b.x.toFixed(0)}" y2="${b.y.toFixed(0)}"
+      stroke="${C.alert}" stroke-opacity=".28" stroke-width="1.2"/>`; });
+  D.tables.forEach(t=>{ const q=pos[t.name]; if(!q) return;
+    const k=kind(t), fill=k==="used"?C.used:k==="idle"?C.idle:C.empty;
+    const dark=k==="used", spine=t.name==="animals";
+    o+=`<g class="tnode" onclick="openTable('${t.name}')">
+      <rect x="${(q.x-q.w/2).toFixed(0)}" y="${(q.y-q.h/2).toFixed(0)}" width="${q.w}" height="${q.h}"
+        rx="2" fill="${fill}" stroke="${k==="idle"?C.alert:C.line}"
+        stroke-width="${k==="idle"?1.4:1}"/>
+      <text x="${q.x.toFixed(0)}" y="${(q.y-2).toFixed(0)}" text-anchor="middle"
+        font-size="${spine?12.5:10.5}" font-weight="700" fill="${dark?C.panel:C.ink}"
+        font-family="ui-monospace,Menlo,Consolas,monospace">${esc(t.name)}</text>
+      <text x="${q.x.toFixed(0)}" y="${(q.y+12).toFixed(0)}" text-anchor="middle"
+        font-size="${spine?10:9.5}" fill="${dark?C.panel:C.ink}" opacity=".8"
+        font-family="ui-monospace,Menlo,Consolas,monospace">${t.rows.toLocaleString()} × ${t.cols}</text>
+    </g>`; });
+  /* faint guide rings, so the two join distances read as distinct orbits */
+  [1,2].forEach(r=>{o=`<circle cx="${cx}" cy="${cy}" r="${R[r].toFixed(0)}" fill="none"
+      stroke="${C.rule}" stroke-dasharray="3 5"/>`+o;});
+  if(shelf.length){
+    o=`<text x="35" y="22" font-size="11.5" font-weight="700" letter-spacing="1.3"
+        fill="${C.lab}">NO CONFIRMED JOIN TO ANIMALS</text>`+o;
+    o+=`<line x1="35" y1="${shelfH+8}" x2="${W-35}" y2="${shelfH+8}" stroke="${C.rule}"/>
+      <text x="35" y="${shelfH+30}" font-size="11.5" font-weight="700" letter-spacing="1.3"
+        fill="${C.lab}">JOINED TO THE SPINE</text>`;}
+  const svg=document.getElementById("map");
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  /* natural pixel size, NOT stretched to the page: the frame scrolls instead */
+  const zoom=v=>{svg.style.width=Math.round(W*v)+"px";
+                 svg.style.height=Math.round(H*v)+"px";};
+  zoom(1); window.__zoom=zoom; window.__fit=()=>
+    zoom(Math.min(1,(document.querySelector(".mapwrap").clientWidth-24)/W));
+  svg.innerHTML=o;
+  /* a PNG at 3x, for zooming in an image viewer. PNG not JPG on purpose:
+     JPEG blurs hairlines and small type into mush on line art like this. */
+  window.__png=()=>{
+    const clone=svg.cloneNode(true);
+    clone.setAttribute("width",W); clone.setAttribute("height",H);
+    clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
+    /* the page background is a CSS variable the clone will not inherit */
+    const bg=getComputedStyle(document.body).backgroundColor;
+    clone.insertAdjacentHTML("afterbegin",
+      `<rect x="0" y="0" width="${W}" height="${H}" fill="${bg}"/>`);
+    const url="data:image/svg+xml;charset=utf-8,"+
+      encodeURIComponent(new XMLSerializer().serializeToString(clone));
+    const img=new Image();
+    img.onload=()=>{ const S=3, c=document.createElement("canvas");
+      c.width=W*S; c.height=H*S;
+      const g=c.getContext("2d"); g.scale(S,S); g.drawImage(img,0,0);
+      const a=document.createElement("a");
+      a.download="cattlemax_source_map.png"; a.href=c.toDataURL("image/png"); a.click(); };
+    img.src=url;
+  };
+
+  const idle=D.tables.filter(t=>kind(t)==="idle").sort((a,b)=>b.rows-a.rows);
+  const empty=D.tables.filter(t=>kind(t)==="empty");
+  const unlinked=rings[3].filter(t=>t.rows>0).map(t=>t.name);
+  document.getElementById("map-note").textContent=
+    `${D.nFiles} files, ${D.edges.length} joins confirmed by matching values. `+
+    `${D.tables.filter(t=>kind(t)==="used").length} are read by the pipeline, `+
+    `${idle.length} hold data nobody reads, ${empty.length} are empty in this pull.`+
+    (unlinked.length?` ${unlinked.length} could not be joined to animals at all: ${unlinked.join(", ")}.`:"");
+  document.getElementById("idle").innerHTML=
+    `<b>${idle.length} files hold data the pipeline never opens</b>, largest first:<ul style="margin:7px 0 0;padding-left:19px">`+
+    idle.slice(0,14).map(t=>`<li><code>${esc(t.name)}</code> &mdash; ${n(t.rows)} rows, ${t.cols} columns`+
+      (t.animals?`, ${n(t.animals)} animals`:"")+`</li>`).join("")+
+    `</ul><p style="margin:8px 0 0">Empty in this pull, so nothing is being missed: `+
+    empty.map(t=>`<code>${esc(t.name)}</code>`).join(", ")+`.</p>`;
+})();
+
+/* ---------- every file, every column ---------- */
+const COLS={}; D.columns.forEach(c=>{(COLS[c.table]=COLS[c.table]||[]).push(c);});
+const EDGE={}; D.edges.forEach(e=>{(EDGE[e.from]=EDGE[e.from]||[]).push(e);});
+function draw(){
+  const term=document.getElementById("q").value.trim().toLowerCase();
+  const f=document.getElementById("f").value;
+  const list=D.tables.filter(t=>(!f||kind(t)===f)&&
+    (!term||t.name.toLowerCase().includes(term)||
+     (COLS[t.name]||[]).some(c=>c.col.toLowerCase().includes(term))))
+    .sort((a,b)=>b.rows-a.rows);
+  document.getElementById("count").textContent=`${list.length} of ${D.tables.length} files`;
+  document.getElementById("tables").innerHTML=list.map(t=>{
+    const k=kind(t), cs=(COLS[t.name]||[]).slice()
+      .sort((a,b)=>b.fill-a.fill||a.col.localeCompare(b.col));
+    const joins=(EDGE[t.name]||[]).map(e=>
+      `<code>${esc(e.via)}</code> &rarr; <code>${esc(e.to)}</code> (${e.match}% match)`).join(" &middot; ");
+    const rows=cs.map(c=>`<tr><td class="rawtxt">${esc(c.col)}</td>
+      <td class="fillcell"><span class="fb" style="width:${(c.fill*0.85).toFixed(0)}px"></span>
+      <span class="${c.fill<25?"dim":""}">${c.fill}%</span></td>
+      <td>${n(c.uniq)}</td></tr>`).join("");
+    return `<details class="tbl ${k}" id="t-${esc(t.name)}">
+      <summary><span class="tname">${esc(t.name)}</span>
+        <span class="badge ${k==="used"?"b-used":k==="idle"?"b-idle":"b-empty"}">${
+          k==="used"?"in use":k==="idle"?"not read":"empty"}</span>
+        <span class="tmeta">${n(t.rows)} rows &middot; ${t.cols} cols${
+          t.animals?` &middot; ${n(t.animals)} animals`:""}</span></summary>
+      <div style="padding:0 13px 10px">
+        ${joins?`<p class="note" style="margin:6px 0 8px">joins: ${joins}</p>`:
+                `<p class="note" style="margin:6px 0 8px">no confirmed join to another file</p>`}
+        ${t.rows?`<table class="comptbl"><thead><tr><th>Column</th><th>Fill</th>
+          <th>Distinct values</th></tr></thead><tbody>${rows}</tbody></table>`:
+          `<p class="note">empty in this pull</p>`}
+      </div></details>`;}).join("");
+}
+function openTable(nm){
+  document.getElementById("q").value=nm; document.getElementById("f").value=""; draw();
+  const el=document.getElementById("t-"+nm);
+  if(el){el.open=true; el.scrollIntoView({behavior:"smooth",block:"center"});}
+}
+["q","f"].forEach(id=>document.getElementById(id).addEventListener("input",draw));
+draw();
+</script>
+</body>
+</html>

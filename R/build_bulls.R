@@ -7,7 +7,7 @@
 ## soundness history, his use as a sire, his progeny, and his sale outcome.
 ##
 ## This closes the largest recoverable exclusion on the ledger (1,896 records
-## excluded from cows.parquet purely for not being female).
+## excluded from cow_lactations.parquet purely for not being female).
 ## ---------------------------------------------------------------
 options(width=220)
 if (!exists("cfg")) {
@@ -121,6 +121,6 @@ cat("\n=== FLAGS ===\n"); print(sapply(B[,grep("^flag_",names(B))], sum, na.rm=T
 
 excl_add("bulls.parquet", "animal is not sex == Bull",
          sum(!(M$sex %in% "Bull")), n_animals=sum(!(M$sex %in% "Bull")),
-         detail="females are in cows.parquet; 91 steers and 24 with no sex have no table",
+         detail="females are in cow_lactations.parquet; 91 steers and 24 with no sex have no table",
          recoverable=TRUE)
 excl_write(cfg$silver)

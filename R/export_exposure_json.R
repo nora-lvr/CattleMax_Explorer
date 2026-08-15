@@ -6,7 +6,7 @@ if (!exists("cfg")) {
 }
 cm_announce(cfg)
 OUT <- cfg$derived
-CS <- cm_read_silver(cfg, "cows")
+CS <- cm_read_silver(cfg, "cow_lactations")
 PULL <- cfg$pull_date; GEST <- cfg$gestation_days
 
 ## Cohort labels, the due date and lost/retained are all computed once in

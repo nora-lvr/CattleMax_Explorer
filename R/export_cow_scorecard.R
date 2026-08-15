@@ -8,7 +8,7 @@ cm_announce(cfg)
 S  <- cm_read_silver(cfg, "cow_scorecard")
 CF <- cm_read_silver(cfg, "calf_fates")
 A  <- cm_read_silver(cfg, "animals")
-K  <- cm_read_silver(cfg, "cows")
+K  <- cm_read_silver(cfg, "cow_lactations")
 PULL <- cfg$pull_date
 
 emit <- function(l) jobj(paste(mapply(function(k,v)
@@ -123,7 +123,7 @@ json <- jobj(
   jp("pctDelivered", round(100*sum(E$delivered)/sum(E$final),1)),
   jp("neverMissed", sum(E$pct_delivered == 100)),
   ## the calving hurdle is only observable on cows that have LEFT: a season in
-  ## cows.parquet ends AT a calving, so a season with no calf only closes when
+  ## cow_lactations.parquet ends AT a calving, so a season with no calf only closes when
   ## she goes. On an active-only scorecard every cow reads 100% calved by
   ## construction, which is an artefact and must never be printed as a finding.
 

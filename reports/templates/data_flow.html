@@ -70,9 +70,10 @@ td.f{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:
 <div class="wrap">
 <header>
   <h1>How a CattleMax export becomes the silver tables</h1>
-  <p class="sub">Every transformation between the raw export and the three tables all reporting reads
-  from, with the rule applied, why it exists, and how many records it touched on this pull. Counts are
-  generated from the pipeline itself, so this page cannot drift from what the code did.</p>
+  <p class="sub">Every transformation between the raw export and the silver tables all reporting reads from,
+  with the rule applied, why it exists, and how many records it touched on this pull. Counts and the
+  diagram are both generated from the pipeline itself, so this page cannot drift from what the code
+  did &mdash; adding a table to the pipeline makes it appear here.</p>
   <div class="stamp">
     <span>herd <b id="s-herd"></b></span><span>pull <b id="s-pull"></b></span>
     <span>pulled <b id="s-date"></b></span><span>record horizon <b id="s-hz"></b></span>
@@ -81,10 +82,10 @@ td.f{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:
 </header>
 
 <h2>The flow</h2>
-<p class="lede">Grey is what CattleMax gave us. Dark is what we build. Every arrow carries a rule,
-numbered to the decision that governs it.</p>
+<p class="lede">Grey is what CattleMax gave us. Dark is what we build. Columns are build order:
+nothing in a column can be produced without the column to its left.</p>
 <figure><svg class="flow" id="flow" viewBox="0 0 1140 560" role="img"
-  aria-label="Data flow from the CattleMax export to the three silver tables"></svg></figure>
+  aria-label="Data flow from the CattleMax export to the silver tables"></svg></figure>
 
 <h2>Decisions, in the order they are applied</h2>
 <p class="lede">Every rule below changes what the numbers mean. Those marked
@@ -109,68 +110,63 @@ document.getElementById("s-date").textContent=L.pulled;
 document.getElementById("s-hz").textContent=L.horizon;
 document.getElementById("s-gen").textContent=L.generated;
 
-/* ---------- flow diagram ---------- */
+/* ---------- flow diagram, LAID OUT FROM THE DATA ----------
+   Boxes and arrows are generated from stages[].tier and stages[].reads, so a
+   table added to the pipeline appears here automatically. The previous version
+   hand-positioned three boxes and went silently blind to the five that came
+   after it. Nothing in this function names a table. */
 function flow(){
-  const W=1140,H=560, C={raw:cssv("--raw"),silver:cssv("--ui"),ink:cssv("--ink"),
-    panel:cssv("--panel"),line:cssv("--ui-2"),lab:cssv("--ink-3"),alert:cssv("--alert")};
-  const S=Object.fromEntries(L.stages.map(s=>[s.id,s]));
-  const box=(x,y,w,h,fill,txt,sub,dark)=>`
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${fill}" stroke="${C.line}"/>
-    <text x="${x+14}" y="${y+25}" font-size="14.5" font-weight="700" fill="${dark?C.panel:C.ink}"
-      font-family="ui-monospace,Menlo,Consolas,monospace">${esc(txt)}</text>
-    <text x="${x+14}" y="${y+45}" font-size="12.5" fill="${dark?C.panel:C.ink}" opacity=".85">${esc(sub)}</text>`;
-  const arrow=(x1,y1,x2,y2,label,n)=>{
-    const mx=(x1+x2)/2;
-    return `<path d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2-9} ${y2}" fill="none"
-      stroke="${C.line}" stroke-width="1.6" marker-end="url(#a)"/>
-      ${label?`<text x="${mx}" y="${(y1+y2)/2-7}" font-size="11" fill="${C.lab}" text-anchor="middle"
-        font-family="ui-monospace,Menlo,Consolas,monospace">${esc(label)}</text>`:""}
-      ${n?`<circle cx="${mx}" cy="${(y1+y2)/2+9}" r="9" fill="${C.silver}"/>
-        <text x="${mx}" y="${(y1+y2)/2+13}" font-size="11" font-weight="700" fill="${C.panel}"
-        text-anchor="middle">${n}</text>`:""}`;
-  };
-  let o=`<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
-    orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${C.line}"/></marker></defs>`;
-  o+=`<text x="30" y="30" font-size="11" font-weight="700" letter-spacing="1.5"
-     fill="${C.lab}">RAW EXPORT</text>`;
-  o+=`<text x="700" y="30" font-size="11" font-weight="700" letter-spacing="1.5"
-     fill="${C.lab}">SILVER TABLES &mdash; ALL REPORTING READS THESE</text>`;
+  const C={raw:cssv("--raw"),silver:cssv("--ui"),ink:cssv("--ink"),panel:cssv("--panel"),
+           line:cssv("--ui-2"),lab:cssv("--ink-3"),alert:cssv("--alert")};
+  const BW=250, BH=62, GAPY=20, COLGAP=110, PADT=64, PADL=30;
+  const tiers=[...new Set(L.stages.map(s=>s.tier))].sort((a,b)=>a-b);
+  /* tier 0 is the raw export; every later tier is something we build */
+  const byTier={}; tiers.forEach(t=>byTier[t]=L.stages.filter(s=>s.tier===t));
+  const rows=Math.max(...tiers.map(t=>byTier[t].length));
+  const W=PADL*2+tiers.length*BW+(tiers.length-1)*COLGAP;
+  const H=PADT+rows*(BH+GAPY)+70;
+  const pos={};
+  tiers.forEach((t,ti)=>{
+    const col=byTier[t];
+    /* centre each column vertically so the diagram reads as a fan, not a grid */
+    const top=PADT+((rows-col.length)*(BH+GAPY))/2;
+    col.forEach((s,si)=>{pos[s.id]={x:PADL+ti*(BW+COLGAP), y:top+si*(BH+GAPY), s};});
+  });
+  const TIERLAB=["Raw export","Built from raw","Built from silver","Scorecards and the ledger"];
+  /* arrows must NOT share the box palette: drawn in the accent, they stay
+     readable where they pass over or land on a dark box */
+  const ARR=C.alert;
+  let o=`<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8"
+    orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="${ARR}"/></marker></defs>`;
+  tiers.forEach((t,ti)=>{
+    o+=`<text x="${PADL+ti*(BW+COLGAP)}" y="34" font-size="11" font-weight="700"
+       letter-spacing="1.4" fill="${C.lab}">${esc((TIERLAB[ti]||"Derived").toUpperCase())}</text>`;});
 
-  o+=box(30,52,250,62,C.raw,"animals.csv",S.raw.n.toLocaleString()+" rows",false);
-  o+=box(30,140,250,62,C.raw,"movements · measurements","treatments · notes · breedings",false);
-  o+=box(30,228,250,62,C.raw,"sale_tickets · embryos","flushes · preg_checks",false);
-  o+=box(30,316,250,62,C.raw,"groupings · groups","categories",false);
-  o+=box(30,404,250,62,C.raw,"treatments.csv",TXROWS.toLocaleString()+" rows",false);
+  /* arrows first, so boxes sit on top of them */
+  L.stages.forEach(s=>{(s.reads||[]).forEach(src=>{
+    const a=pos[src], b=pos[s.id]; if(!a||!b) return;
+    const x1=a.x+BW, y1=a.y+BH/2, x2=b.x, y2=b.y+BH/2, mx=(x1+x2)/2;
+    o+=`<path d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2-9} ${y2}" fill="none"
+      stroke="${ARR}" stroke-width="1.6" stroke-opacity=".85" marker-end="url(#a)"/>`;});});
 
-  o+=box(700,120,400,74,C.silver,"animals.parquet",
-    S.animals.n.toLocaleString()+" animals · "+S.animals.note,true);
-  o+=box(700,250,400,74,C.silver,"cows.parquet",
-    S.cows.n.toLocaleString()+" cow-seasons · "+S.cows.note,true);
-  o+=box(700,380,400,74,C.silver,"treatments.parquet",
-    S.treatments.n.toLocaleString()+" events · "+S.treatments.note,true);
+  L.stages.forEach(s=>{
+    const {x,y}=pos[s.id], dark=s.tier>0, fill=dark?C.silver:C.raw;
+    o+=`<rect x="${x}" y="${y}" width="${BW}" height="${BH}" rx="2" fill="${fill}" stroke="${C.line}"/>
+      <text x="${x+12}" y="${y+24}" font-size="13.5" font-weight="700"
+        fill="${dark?C.panel:C.ink}"
+        font-family="ui-monospace,Menlo,Consolas,monospace">${esc(s.label)}</text>
+      <text x="${x+12}" y="${y+41}" font-size="11.5" fill="${dark?C.panel:C.ink}"
+        opacity=".85">${s.n.toLocaleString()} rows</text>
+      <text x="${x+12}" y="${y+55}" font-size="10.5" fill="${dark?C.panel:C.ink}"
+        opacity=".65">${esc(s.note).slice(0,44)}</text>`;});
 
-  o+=box(390,140,230,62,C.panel,"exclude Reference",
-    S.nonref.n.toLocaleString()+" remain",false);
-  o+=arrow(280,83,390,160,"","1");
-  o+=arrow(280,171,390,171,"","");
-  o+=arrow(620,171,700,157,"entry · exit · weaning · phase","");
-  o+=arrow(280,259,700,190,"","3");
-  o+=arrow(280,347,700,194,"group + category labels","");
-
-  o+=arrow(1100,157,1100,287,"","")
-    .replace('C 1100 157, 1100 287','C 1160 157, 1160 287');
-  o+=`<path d="M1100 194 C 1130 210, 1130 260, 1102 287" fill="none" stroke="${C.line}"
-      stroke-width="1.6" marker-end="url(#a)"/>
-      <text x="1136" y="245" font-size="10.5" fill="${C.lab}" text-anchor="middle">reads</text>`;
-  o+=arrow(280,435,700,417,"","11");
-  o+=`<path d="M1100 194 C 1128 250, 1128 360, 1102 417" fill="none" stroke="${C.line}"
-      stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#a)"/>`;
-
-  o+=`<text x="700" y="500" font-size="12" fill="${C.lab}">Numbered circles are the decisions below.</text>`;
-  o+=`<text x="700" y="520" font-size="12" fill="${C.alert}">Nothing downstream may re-derive a value these tables already store.</text>`;
-  document.getElementById("flow").innerHTML=o;
+  o+=`<text x="${PADL}" y="${H-34}" font-size="12" fill="${C.lab}">Every arrow is a build step. Grey is what CattleMax gave us; dark is what we build.</text>`;
+  o+=`<text x="${PADL}" y="${H-16}" font-size="12" fill="${C.alert}">Nothing downstream may re-derive a value these tables already store.</text>`;
+  const svg=document.getElementById("flow");
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  svg.innerHTML=o;
 }
-const TXROWS = L.stages.find(s=>s.id==="treatments").n;
+
 
 /* ---------- decisions ---------- */
 const TAGTXT={yes:"validated",no:"not validated",partly:"partly validated"};
