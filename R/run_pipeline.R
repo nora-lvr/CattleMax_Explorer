@@ -20,6 +20,7 @@ cat(strrep("=", 78), "\n")
 cm_announce(cfg)
 
 steps <- c(
+  "check_schema.R",      # STEP ZERO: has CattleMax changed the shape of the export?
   "build_animals.R",     # one row per animal; everything else reads it
   "build_cows.R",        # one row per cow-season
   "build_bulls.R",       # one row per bull
