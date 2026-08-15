@@ -15,11 +15,29 @@ own active count (1,857 on River Creek). PLAN.md still locks Python as the event
 the R scripts are the sandbox that pinned down the rules — see [R/README.md](R/README.md).
 
 ## What exists
-- `R/build_animals.R` → `data/silver-data/animals.parquet` — one row per animal, every event date,
-  phase boundaries as dates, entry/exit each with a `_rule` column, six `flag_*` columns.
-- `R/build_cows.R` → `data/silver-data/cow_lactations.parquet` — one row per **cow-season** (a season ends at
-  each calving), with censoring flags and a single `analysis_ready` column.
-- `R/export_*_json.R` + `reports/templates/herd_report.html` → a self-contained, emailable report.
+`R/run_pipeline.R` runs everything in order. `R/check_data.R` is both the first and the last step.
+
+**Silver tables** (`data/silver-data/`, gitignored): `animals`, `cow_lactations` (one row per
+lactation), `bulls`, `treatments`, `locations`, `phase_risk`, `disease_cases`, `calf_fates`,
+`cow_scorecard`, `exclusions`.
+
+**Guards** — `R/check_data.R` + `reference/columns.csv` + `reference/cattlemax_schema.json`.
+Before the builds it asks whether the export changed shape; after them, whether every column
+traces to the export or to an approved rule. Both configs are **schema and classification only —
+no counts** — so they are portable to any herd.
+
+**Reports** — `R/export_*.R` → JSON, inlined into `reports/templates/*.html` by
+`R/render_disease_report.R` (generic: template, output, json). Self-contained, emailable.
+`data_flow.html` (how the export becomes the silver tables) and `source_map.html` (all 59 export
+files, 47 confirmed joins, what we do and don't read) are both **generated from the data** — the
+layout code names no table, so a new table appears automatically.
+
+## Diagrams
+Generate the layout from the data; never hand-position boxes. Radial for hub-and-spoke, columns for
+build order. Optimise edges (barycentre ordering, then a hill climb on total length; place outer-ring
+nodes at their parent's angle). Render at natural size in a scrolling frame with zoom — a shared
+stylesheet's `svg{width:100%}` beats a width *attribute* and silently kills zoom. Arrows in the
+accent colour, never the box palette. Offer a 3× PNG export.
 
 ## Production phases (locked)
 **Calf** (entry→weaning) · **Growing** (weaning→sale/first calving/first exposure) ·
@@ -43,7 +61,13 @@ Donor/Recipient is an orthogonal **role**, not a phase.
    writes the sentence around a validated number.
 3. **Gates refuse and list valid options** rather than returning a plausible-wrong answer.
 4. **Stamp every answer** with pull + its date + metric definition + code version.
-5. **Read CSVs with a real quoted parser** (polars/DuckDB) — free-text fields contain commas/newlines.
+5. **Read CSVs with a real quoted parser, every column as character.** Free-text fields contain
+   commas and newlines. `cm_read` uses **readr** (Nora: "use tidyverse when possible, it is
+   safest") with `cols(.default = col_character())` — nothing type-guessed — and treats **only `""`
+   as missing, never the text `"NA"`** (a sale ticket's invoice is literally `NA`; reading it as
+   missing deleted a real value). Convert dates and numbers deliberately, downstream, where the
+   conversion can be checked. Type inference would have destroyed 38 identifier values in
+   `animals.csv` alone (`reg_num` = "COMM"/"pending", `electronic_id` with spaces).
 6. **Exclude `status == "Reference"`** from presence — it's ~71% of rows and the biggest filter.
 7. **`dam_animal_id` is the female who CARRIED the calf.** `real_dam_animal_id` is the genetic/registry
    dam and for ET calves names the **donor** — using it credits donors with their recipients'
@@ -65,6 +89,20 @@ Donor/Recipient is an orthogonal **role**, not a phase.
     with what it was, why it went, how many, and whether a rule change could recover it. A report
     that excludes records without naming them is not finished. This is Nora's standing rule
     (2026-08-14) and it outranks tidiness.
+13. **NEVER invent a value.** Do not estimate, assume or impute anything unless Nora has been shown
+    that specific scenario and has approved it **by name**. Missing stays missing: NA plus a reason
+    column, never a plugged number. A fabricated value is worse than a gap — it is indistinguishable
+    from a real one downstream and silently becomes a denominator, and this is a veterinary decision
+    tool where a made-up date can become a cull call. Nora's standing rule (2026-08-15): *"you are
+    not allowed to make things up like this. We don't ever make up data unless we have discussed it
+    and I specifically approved it."*
+    - Prefer **restructuring over imputing**. If a missing weaning date means the Calf phase never
+      ends, the fix is a better phase-end rule, not a manufactured weaning date.
+    - Enforced by `R/check_data.R`, which classifies every silver column as **sourced / derived /
+      invented** against `reference/columns.csv` and **fails the build** on anything unclassified or
+      unapproved. It was written because a hand-audit missed things twice: a keyword scan missed
+      `first_calving-283d`, and a provenance-column scan missed `inactivated_date` — a column with
+      no CattleMax equivalent at all, which Claude fabricated and named like a fact.
 
 ## The core problem (Phase 1)
 Reconstruct **"count present cattle in any group on any date"** from `animals` (presence intervals) +

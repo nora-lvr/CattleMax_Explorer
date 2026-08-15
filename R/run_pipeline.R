@@ -20,7 +20,7 @@ cat(strrep("=", 78), "\n")
 cm_announce(cfg)
 
 steps <- c(
-  "check_schema.R",      # STEP ZERO: has CattleMax changed the shape of the export?
+  "check_data.R",        # has the export changed shape? (schema only - see below)
   "build_animals.R",     # one row per animal; everything else reads it
   "build_cows.R",        # one row per cow-season
   "build_bulls.R",       # one row per bull
@@ -31,7 +31,7 @@ steps <- c(
   "build_cow_scorecard.R",   # one row per calving on the outcome ladder, one per cow
   "export_disease_review.R", # the editable disease grouping sheet
   "export_lineage.R",    # the data-flow document's live counts
-  "test_no_invention.R"  # FINAL GATE: nothing manufactured ships without approval
+  "check_data.R"         # FINAL GATE: every column traces, nothing unapproved ships
 )
 
 ## The step scripts run in the global environment and freely use short names
@@ -41,6 +41,10 @@ steps <- c(
 .cm_announced <- TRUE          # steps skip their own banner once this is set
 for (.cm_i in seq_along(steps)) {
   .cm_step <- steps[.cm_i]
+  ## check_data.R runs twice. The first pass is BEFORE anything is built, so it
+  ## can only ask whether the export changed shape; the last pass checks the
+  ## output. Sourcing cannot pass arguments, so the mode goes in a variable.
+  if (.cm_step == "check_data.R" && .cm_i == 1) CHECK_MODE <- "schema"
   cat("\n", strrep("-", 78), "\n", sep = "")
   cat("STEP ", .cm_i, "/", length(steps), ": ", .cm_step, "\n", sep = "")
   cat(strrep("-", 78), "\n", sep = "")
