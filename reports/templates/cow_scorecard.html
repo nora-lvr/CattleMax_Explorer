@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cow Scorecard</title>
+<!--__STYLE__-->
+<style>
+/* scorecard-specific: a long sortable table and the outcome ladder */
+.sortable th{cursor:pointer;user-select:none}
+.sortable th:hover{color:var(--ink)}
+.sortable th.on{color:var(--alert)}
+.sortable th.on::after{content:"\2193";margin-left:3px}
+.sortable th.on.asc::after{content:"\2191"}
+.tools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:10px 0 8px;font-size:13px}
+.tools input,.tools select{font:inherit;padding:5px 8px;border:1px solid var(--rule);
+  background:var(--panel);color:var(--ink);border-radius:2px}
+.tools input{min-width:190px}
+.count{color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+.scroll{max-height:620px;overflow:auto}
+.scroll thead th{position:sticky;top:0;background:var(--panel);z-index:2;box-shadow:0 1px 0 var(--rule)}
+tr.cull td{background:var(--alert-soft)}
+tr.ace td:first-child{box-shadow:inset 3px 0 0 var(--ui)}
+.pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;padding:1px 6px;border-radius:2px;white-space:nowrap}
+.p-birth{background:var(--alert);color:#fff}
+.p-pre{border:1px solid var(--alert);color:var(--alert)}
+.p-post{border:1px solid var(--alert);color:var(--alert);opacity:.72}
+.p-open{border:1px solid var(--ui-2);color:var(--ink-2)}
+.p-none{border:1px solid var(--rule);color:var(--ink-3)}
+/* the ladder */
+.ladder{display:grid;gap:3px;margin:8px 0 2px}
+.rung{display:grid;grid-template-columns:250px 1fr auto;gap:10px;align-items:center;font-size:13px}
+.rung .rbar{height:19px;background:var(--bar-2)}
+.rung.lost  .rbar{background:var(--alert)}
+.rung.won   .rbar{background:var(--ui)}
+.rung.prelim .rbar{background:var(--bar-2);opacity:.45}
+.rung .rn{font-variant-numeric:tabular-nums;color:var(--ink-2);min-width:104px;text-align:right}
+.rung .rlab{color:var(--ink-2)}
+.rung .tag{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-left:6px}
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:6px 0 4px}
+.mode{background:var(--panel);border:1px solid var(--rule);padding:13px 16px;border-left:4px solid var(--alert)}
+.mode.b2{border-left-color:var(--alert);opacity:.94}
+.mode.b3{border-left-color:var(--ui-2)}
+.mode h4{margin:0 0 3px;font-family:"Arial Narrow","Roboto Condensed",sans-serif;font-stretch:condensed;
+  text-transform:uppercase;letter-spacing:.08em;font-size:13px;font-weight:700}
+.mode .big{font-size:29px;font-weight:640;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.mode p{margin:5px 0 0;font-size:13px;color:var(--ink-2)}
+details.cowdet{border:1px solid var(--rule);background:var(--panel);margin-bottom:6px}
+details.cowdet>summary{cursor:pointer;padding:8px 13px;list-style:none;font-size:13.5px}
+details.cowdet>summary::-webkit-details-marker{display:none}
+details.cowdet>summary::before{content:"\25B8";color:var(--ink-3);margin-right:8px;font-size:11px}
+details.cowdet[open]>summary::before{content:"\25BE"}
+td.rawtxt{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:400}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brandline">
+    <p class="wordmark">LVR</p>
+    <span class="doctype">Cow Scorecard</span>
+    <span class="herdname" id="s-herd"></span>
+  </div>
+  <h1>Which cows deliver a calf to transition</h1>
+  <p class="sub">A calf has succeeded when it becomes a product or a producer &mdash; <b>sold, calved,
+  or put to work as a sire</b>. What happens to that animal afterwards is its own record, not its
+  dam's, so a heifer who calved and later died still counts as a calf delivered.</p>
+  <div class="stamp">
+    <span>pull <b id="s-pull"></b></span><span>pulled <b id="s-date"></b></span>
+    <span>seasons <b id="s-first"></b> to <b id="s-last"></b></span>
+    <span>neonatal <b id="s-neo"></b> days</span>
+    <span>min <b id="s-min"></b> final seasons</span>
+    <span id="s-scope"></span>
+  </div>
+</header>
+
+<div class="warn" id="scope-warn" hidden></div>
+
+<h2>The outcome ladder</h2>
+<p class="lede">Every calving in the record, reported at its exact current status. An outcome is
+<b>final</b> when it can no longer change, and <b>preliminary</b> when the calf is alive but has not
+yet been sold or calved. Preliminary seasons are carried, never counted as failures &mdash; a calf
+still growing is not a calf lost.</p>
+<div class="ladder" id="ladder"></div>
+<p class="note" id="ladder-note"></p>
+
+<h2>The herd, over final seasons</h2>
+<p class="lede">Rates below use <b>final</b> seasons only, on scored cows.</p>
+<div class="ladder" id="funnel"></div>
+<p class="note" id="funnel-note"></p>
+
+<h2>The three ways a calf is lost</h2>
+<p class="lede">This split decides what you do next. A calf dead in the first week is a <b>calving and
+dam</b> problem &mdash; that follows the cow. A calf dead before weaning is <b>scours and pneumonia</b>.
+A calf dead after weaning is a <b>growing-cattle</b> problem. Only the first is reliably a cull
+conversation.</p>
+<div class="split" id="modes"></div>
+<div class="card"><h3>What was written down, by when the calf was lost</h3>
+  <p class="cap">Recorded reason against the stage of loss. Nothing rolled up beyond the reason
+  groups already in the pipeline; the raw words are below.</p>
+  <table id="tbl-band"></table></div>
+<details class="cowdet"><summary>Every reason recorded against a lost calf, in the practice's own words</summary>
+  <table id="tbl-reason" class="comptbl"></table></details>
+
+<h2>Cows to look at first</h2>
+<p class="lede">Ranked worst first by <b>delivered</b> &mdash; the share of her final seasons that put
+a calf on the ground and got it to a transition. Open a row for her actual calves; a cull call should
+be checkable against them, not taken on trust.</p>
+<p class="note" id="culls-note"></p>
+<div id="culls"></div>
+
+<h2>The full scorecard</h2>
+<p class="lede">Every scored cow. Sort any column, filter by failure mode, or search a tag or ID.</p>
+<div class="tools">
+  <input id="q" type="search" placeholder="tag or animal ID" aria-label="search">
+  <select id="fherd"><option value="here">still in the herd</option>
+    <option value="">every scored cow</option>
+    <option value="gone">cows that have left</option></select>
+  <select id="fmode"><option value="">every failure mode</option></select>
+  <span class="count" id="count"></span>
+</div>
+<div class="card scroll"><table id="tbl-all" class="sortable"></table></div>
+
+<h2>What this report does not know</h2>
+<div class="warn" id="dropped"></div>
+<p class="note">Nothing has been discarded to produce these figures. Every rate above accounts for
+every final season on every scored cow, and everything left out is named with its count and reason.
+The full ledger ships beside the data.</p>
+</div>
+
+<script>
+const D = /*__DATA__*/;
+const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const n=v=>(v==null?"":v.toLocaleString());
+const pc=(a,b)=>b?(100*a/b).toFixed(1)+"%":"0%";
+document.getElementById("s-herd").textContent=D.herd;
+document.getElementById("s-pull").textContent=D.pull;
+document.getElementById("s-date").textContent=D.pulled;
+document.getElementById("s-neo").textContent=D.neonatalDays;
+document.getElementById("s-min").textContent=D.minFinal;
+document.getElementById("s-first").textContent=D.firstSeason;
+document.getElementById("s-last").textContent=D.lastSeason;
+document.getElementById("s-scope").innerHTML=
+  `<b>${n(D.nHere)}</b> still here, <b>${n(D.nGone)}</b> gone`;
+
+/* A season in the cow table ENDS AT A CALVING, so a season with no calf only
+   closes when the cow leaves. On an active-only scorecard every cow therefore
+   reads 100% calved by construction. That is an artefact, so the calving
+   hurdle is not printed here at all - it is said out loud instead. */
+(function(){
+  const w=document.getElementById("scope-warn"); w.hidden=false;
+  w.innerHTML=`<b>There are two calving signals here, and they are knowable for different cows.</b>
+    A cow-season ends <i>at</i> a calving, so a cow that skips a year does not produce a missed
+    season &mdash; she produces one long one. Every non-calving season in this pull is a cow's
+    <i>last</i> one, none mid-career.
+    <b>LEFT OPEN</b> therefore means she was exposed and left without calving, and it is only
+    knowable once she has gone: ${n(D.leftOpenKnown)} of ${n(D.openKnownSeasons)} final seasons on
+    the ${n(D.openKnownCows)} cows with a closed record. For a cow still here it reads
+    &ldquo;not yet&rdquo;, never &ldquo;no&rdquo;.
+    <b>SLIPPED</b> &mdash; a calving interval of ${D.longInterval} days or more &mdash; is knowable
+    for every cow: ${n(D.slipped)} of ${n(D.intervals)} intervals overall, and
+    ${n(D.slippedHere)} of ${n(D.intervalsHere)} on cows still in the herd.`;
+})();
+
+/* ---- the outcome ladder, every calving ---- */
+(function(){
+  const mx=Math.max(...D.ladder.map(r=>r.n),1);
+  const cls=r=>r.outcome.startsWith("transitioned")?"won":
+             r.outcome.startsWith("died")?"lost":
+             r.outcome.startsWith("alive")?"prelim":"";
+  const tot=D.ladder.reduce((a,r)=>a+r.n,0);
+  document.getElementById("ladder").innerHTML=D.ladder.map(r=>
+    `<div class="rung ${cls(r)}"><span class="rlab">${esc(r.outcome)}${
+       r.stage!=="final"?`<span class="tag">${esc(r.stage)}</span>`:""}</span>
+     <span class="rbar" style="width:${(100*r.n/mx).toFixed(1)}%"></span>
+     <span class="rn">${n(r.n)} &middot; ${pc(r.n,tot)}</span></div>`).join("");
+  const fin=D.ladder.filter(r=>r.stage==="final").reduce((a,r)=>a+r.n,0);
+  const pre=D.ladder.filter(r=>r.stage==="preliminary").reduce((a,r)=>a+r.n,0);
+  const unk=D.ladder.filter(r=>r.stage==="unknowable").reduce((a,r)=>a+r.n,0);
+  document.getElementById("ladder-note").textContent=
+    `${n(tot)} calvings in the whole record: ${n(fin)} final, ${n(pre)} preliminary, `+
+    `${n(unk)} unknowable because the calf has no animal record to follow. `+
+    `A calf that died more than ${D.neonatalDays} days old but had already been sold or calved is `+
+    `counted as delivered, not lost — its death belongs to a longevity metric, not to its dam.`;
+})();
+
+/* ---- the herd over final seasons, on scored cows ---- */
+(function(){
+  const steps=[
+    {k:"final seasons scored",      v:D.final,     c:""},
+    {k:"no calf born",              v:D.noCalf,    c:"lost"},
+    {k:"lost at birth",             v:D.lostBirth, c:"lost"},
+    {k:"lost before weaning",       v:D.lostPre,   c:"lost"},
+    {k:"lost after weaning",        v:D.lostPost,  c:"lost"},
+    {k:"delivered — sold",     v:D.sold,      c:"won"},
+    {k:"delivered — into the herd", v:D.intoHerd, c:"won"}]
+    .filter(s=>s.v>0||s.k.startsWith("final"));
+  document.getElementById("funnel").innerHTML=steps.map(s=>
+    `<div class="rung ${s.c}"><span class="rlab">${s.k}</span>
+       <span class="rbar" style="width:${(100*s.v/(D.final||1)).toFixed(1)}%"></span>
+       <span class="rn">${n(s.v)} &middot; ${pc(s.v,D.final)}</span></div>`).join("");
+  document.getElementById("funnel-note").textContent=
+    `${n(D.nScored)} cows of ${n(D.nCows)} in the cow table have at least ${D.minFinal} final `+
+    `seasons${D.activeOnly?" and are still in the herd":""}, and are scored here. `+
+    `${D.pctDelivered}% of their final seasons delivered a calf to a transition. `+
+    `${n(D.prelim)} further seasons are preliminary and are not in any rate above. `+
+    `${n(D.neverMissed)} cows have never missed.`;
+})();
+
+/* ---- the three loss stages ---- */
+(function(){
+  const t=D.lostBirth+D.lostPre+D.lostPost;
+  const p=v=>t?(100*v/t).toFixed(0):"0";
+  document.getElementById("modes").innerHTML=`
+    <div class="mode"><h4>Lost at birth</h4><div class="big">${n(D.lostBirth)}</div>
+      <p>dead by day ${D.neonatalDays} &mdash; ${p(D.lostBirth)}% of losses. Calving difficulty,
+      born dead, cold, no milk. This one follows the cow.</p></div>
+    <div class="mode b2"><h4>Lost before weaning</h4><div class="big">${n(D.lostPre)}</div>
+      <p>dead on the cow &mdash; ${p(D.lostPre)}% of losses. Scours, pneumonia, accident.
+      Part dam, mostly environment.</p></div>
+    <div class="mode b3"><h4>Lost after weaning</h4><div class="big">${n(D.lostPost)}</div>
+      <p>weaned, then lost before selling or calving &mdash; ${p(D.lostPost)}% of losses.
+      A growing-cattle problem; culling the dam will not fix it.</p></div>`;
+  const sel=document.getElementById("fmode");
+  D.modes.forEach(m=>{const o=document.createElement("option");
+    o.value=m.mode; o.textContent=`${m.mode} (${m.n})`; sel.appendChild(o);});
+})();
+
+/* ---- loss stage x recorded reason ---- */
+(function(){
+  const G=D.bandGroups;
+  let h="<thead><tr><th>Stage of loss</th><th>Calves</th><th>Median age</th>"+
+    G.map(g=>`<th>${esc(g)}</th>`).join("")+"</tr></thead><tbody>";
+  const mx=Math.max(...D.bands.map(b=>b.total),1);
+  D.bands.forEach(b=>{
+    const vals=G.map((_,j)=>b["g"+(j+1)]||0), top=Math.max(...vals);
+    h+=`<tr><td>${esc(b.band)}</td>
+      <td class="bar-cell"><span class="b" style="width:${(b.total/mx*80).toFixed(1)}px"></span>
+      <span>${b.total}</span></td><td>${b.medDay==null?"&middot;":b.medDay+" d"}</td>`+
+      vals.map(v=>`<td class="${v&&v===top?"hi":""}">${v||"&middot;"}</td>`).join("")+"</tr>";});
+  document.getElementById("tbl-band").innerHTML=h+"</tbody>";
+
+  let r="<thead><tr><th>Reason as recorded</th><th>Calves</th><th>At birth</th>"+
+    "<th>Before weaning</th><th>After weaning</th></tr></thead><tbody>";
+  D.reasons.forEach(x=>{r+=`<tr><td class="rawtxt">${esc(x.reason)}</td><td>${x.n}</td>
+    <td class="${x.birth?"hi":""}">${x.birth||"&middot;"}</td>
+    <td>${x.pre||"&middot;"}</td><td>${x.post||"&middot;"}</td></tr>`;});
+  document.getElementById("tbl-reason").innerHTML=r+"</tbody>";
+})();
+
+const PILL={"loses calves at birth":"p-birth","loses calves before weaning":"p-pre",
+  "loses calves after weaning":"p-post","does not calve":"p-open","none - never missed":"p-none"};
+const pill=m=>`<span class="pill ${PILL[m]||"p-none"}">${esc(m)}</span>`;
+
+/* ---- cows to look at first ---- */
+(function(){
+  const CAP=25;
+  const all=D.cows.filter(c=>c.lost>0&&c.pctDelivered<=60)
+    .sort((a,b)=>a.pctDelivered-b.pctDelivered||b.lost-a.lost||b.lostBirth-a.lostBirth||b.final-a.final);
+  const worst=all.slice(0,CAP);
+  document.getElementById("culls-note").textContent=
+    `${all.length} scored cows are at or below 60% delivered with at least one calf lost`+
+    (all.length>CAP?`; the ${CAP} worst are listed here and the rest are in the full scorecard `+
+      `below — sort by Delivered %.`:".");
+  const byDam={}; D.detail.forEach(x=>{(byDam[x.dam]=byDam[x.dam]||[]).push(x);});
+  document.getElementById("culls").innerHTML=worst.map(c=>{
+    const kids=(byDam[c.id]||[]).sort((a,b)=>a.born<b.born?-1:1);
+    const rows=kids.map(k=>`<tr><td>${k.parity}</td><td class="rawtxt">${esc(k.calf)}</td>
+      <td>${esc(k.born)}</td><td>${esc(k.sex)}</td>
+      <td class="${k.lossType?"hi":""}">${esc(k.outcome)}</td>
+      <td>${k.ageDays==null?"&middot;":n(k.ageDays)}</td>
+      <td class="rawtxt">${esc(k.reason)||"&middot;"}</td></tr>`).join("");
+    return `<details class="cowdet"><summary>
+      <b>${esc(c.tag||c.id)}</b>${c.tag?` <span class="cmeta">${esc(c.id)}</span>`:""}
+      &nbsp;&mdash;&nbsp; <b class="hi">${c.pctDelivered}% delivered</b>
+      <span class="cmeta">${c.final} final seasons &middot; ${c.calvings} calvings &middot;
+      ${c.lost} lost (${c.lostBirth} at birth, ${c.lostPre} pre-wean, ${c.lostPost} post-wean)
+      &middot; ${c.age} yr</span> ${pill(c.mode)}</summary>
+      <table class="comptbl"><thead><tr><th>Parity</th><th>Calf</th><th>Born</th><th>Sex</th>
+        <th>Outcome</th><th>Age at exit</th><th>Reason as recorded</th></tr></thead>
+        <tbody>${rows||`<tr><td colspan="7">no calf detail</td></tr>`}</tbody></table>
+    </details>`;}).join("");
+})();
+
+/* ---- the full sortable scorecard ---- */
+(function(){
+  const COLS=[
+    {k:"tag",   t:"Tag",       f:c=>c.tag?esc(c.tag):"&mdash;", num:false},
+    {k:"id",    t:"Animal ID", f:c=>`<span class="rawtxt">${esc(c.id)}</span>`, num:false},
+    {k:"age",   t:"Age yr",    f:c=>c.age==null?"&middot;":c.age, num:true},
+    {k:"status",t:"Status",    f:c=>esc(c.status), num:false},
+    {k:"seasons",t:"Seasons",  f:c=>c.seasons, num:true},
+    {k:"final", t:"Final",     f:c=>c.final, num:true},
+    {k:"prelim",t:"Preliminary",f:c=>c.prelim||"&middot;", num:true},
+    {k:"calvings",t:"Calvings",f:c=>c.calvings, num:true},
+    {k:"delivered",t:"Delivered",f:c=>c.delivered, num:true},
+    {k:"sold",  t:"Sold",      f:c=>c.sold||"&middot;", num:true},
+    {k:"intoHerd",t:"Into herd",f:c=>c.intoHerd||"&middot;", num:true},
+    {k:"slipped",t:"Slipped",  f:c=>c.slipped?`<span class="hi">${c.slipped}</span>`:"&middot;", num:true},
+    {k:"medInterval",t:"Med interval",f:c=>c.medInterval==null?"&middot;":c.medInterval+" d", num:true},
+    {k:"leftOpen",t:"Left open",
+       f:c=>c.openKnown?(c.leftOpen?`<span class="hi">yes</span>`:"no"):`<span class="cmeta">not yet</span>`, num:true},
+    {k:"lost",  t:"Lost",      f:c=>c.lost?`<span class="hi">${c.lost}</span>`:"&middot;", num:true},
+    {k:"lostBirth",t:"At birth",f:c=>c.lostBirth?`<span class="hi">${c.lostBirth}</span>`:"&middot;", num:true},
+    {k:"lostPre",t:"Pre-wean", f:c=>c.lostPre||"&middot;", num:true},
+    {k:"lostPost",t:"Post-wean",f:c=>c.lostPost||"&middot;", num:true},
+    {k:"pctDelivered",t:"Delivered %",
+       f:c=>`<span class="${c.pctDelivered<=60?"hi":""}">${c.pctDelivered}%</span>`, num:true},
+    {k:"mode",  t:"Failure mode", f:c=>pill(c.mode), num:false}];
+  /* the calving column is deliberately absent when it cannot be measured */
+
+  let sortK="pctDelivered", asc=true;
+  const tbl=document.getElementById("tbl-all"), q=document.getElementById("q"),
+        fm=document.getElementById("fmode"), fh=document.getElementById("fherd"),
+        ct=document.getElementById("count");
+  function draw(){
+    const term=q.value.trim().toLowerCase();
+    let rows=D.cows.filter(c=>
+      (!term||(c.tag||"").toLowerCase().includes(term)||c.id.toLowerCase().includes(term))&&
+      (!fm.value||c.mode===fm.value)&&
+      (!fh.value||(fh.value==="here"?c.here:!c.here)));
+    rows.sort((a,b)=>{const x=a[sortK],y=b[sortK];
+      const d=(typeof x==="number"&&typeof y==="number")?x-y:String(x).localeCompare(String(y));
+      return asc?d:-d;});
+    tbl.innerHTML="<thead><tr>"+COLS.map(c=>
+      `<th data-k="${c.k}" class="${c.k===sortK?"on"+(asc?" asc":""):""}">${c.t}</th>`).join("")+
+      "</tr></thead><tbody>"+rows.map(c=>
+      `<tr class="${c.pctDelivered<=60&&c.lostBirth>0?"cull":""}${c.pctDelivered===100?" ace":""}">`+
+      COLS.map(col=>`<td>${col.f(c)}</td>`).join("")+"</tr>").join("")+"</tbody>";
+    ct.textContent=`${rows.length} of ${D.cows.length} cows`;
+    tbl.querySelectorAll("th").forEach(th=>th.onclick=()=>{
+      const k=th.dataset.k;
+      if(k===sortK){asc=!asc;}else{sortK=k;asc=!COLS.find(c=>c.k===k).num;}
+      draw();});
+  }
+  [q,fm,fh].forEach(el=>el.addEventListener("input",draw));
+  draw();
+})();
+
+document.getElementById("dropped").innerHTML=
+  "<b>Left out of the scores above, and why:</b><ul style='margin:7px 0 0;padding-left:19px'>"+
+  D.dropped.filter(x=>x.n>0).map(x=>
+    `<li><b>${n(x.n)}</b> &mdash; ${esc(x.what)}. ${esc(x.why)}.</li>`).join("")+"</ul>";
+</script>
+</body>
+</html>
